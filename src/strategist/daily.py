@@ -2,6 +2,12 @@ from dataclasses import dataclass
 from datetime import date
 import re
 
+from src.strategist.interview import FALLBACK_FOOTAGE
+
+# The one phrase allowed when she has not described her footage yet. It must read as a
+# sentence a stranger would watch, never as the app describing its own placeholder.
+GENERIC_SUBJECT = "real life"
+
 BANNED_HASHTAGS = {"#fyp", "#viral", "#foryou", "#foryoupage", "#trending", "#xyzbca", "#foryoupage"}
 MAX_SHOTS = 6
 MAX_SHOT_SECONDS = 90
@@ -150,8 +156,8 @@ def _subject(answers, label: str) -> str:
     """Their own footage description, trimmed to one clause - the only specific detail
     the local writer is allowed to use."""
     raw = str(getattr(answers, "what_you_actually_film", "") or "").strip()
-    if not raw:
-        return label
+    if not raw or raw.lower() == FALLBACK_FOOTAGE.lower():
+        return GENERIC_SUBJECT
     first = [p.strip() for p in re.split(r"[,;.]| and ", raw) if p.strip()]
     return (first[0] if first else raw)[:48].rstrip(" -")
 

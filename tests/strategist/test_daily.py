@@ -86,3 +86,12 @@ def test_the_day_names_the_shots_it_needs_from_the_footage_they_have():
 
 def test_a_week_seven_day_is_not_beyond_the_plan():
     assert day(date(2027, 5, 1)).week_no == 8
+
+
+def test_the_placeholder_never_becomes_the_thing_she_is_told_to_say():
+    from src.strategist.interview import FALLBACK_FOOTAGE, Interview
+
+    d = build_day(PLAN, ENTRIES, Interview.defaults(""), D, OfflineEngine())
+    assert FALLBACK_FOOTAGE not in d.hook.lower()
+    assert FALLBACK_FOOTAGE not in d.caption.lower()
+    assert "real life" in (d.hook + d.caption).lower()
