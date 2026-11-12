@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Numbers &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>What actually happened</h1>
+<p class="sub">Type three numbers per post, straight off the app's own insights screen:
+<code>views, watched %, follows</code>. One post per line. No export needed.</p>
+
+<div class="card">
+  <form method="post" action="/numbers">
+    <label>Your numbers &mdash; one post per line</label>
+    <textarea name="quick" rows="6" placeholder="1200 41 3&#10;860 18 0&#10;2400 52 11"></textarea>
+    <button type="submit">Read them</button>
+  </form>
+  {% if note %}<p class="k">{{ note }}</p>{% endif %}
+</div>
+
+<details class="card">
+  <summary>Already have a CSV instead?</summary>
+  <p class="sub">Required columns: <code>post_ref, views, avg_watch_pct, follows_gained</code>
+  (optional: <code>platform, published_at, reach, comments, saves, hypothesis</code>).</p>
+  <form method="post" action="/numbers" enctype="multipart/form-data">
+    <input type="file" name="csv" accept=".csv">
+    <button type="submit">Read the file</button>
+  </form>
+</details>
+
+{% if adjustments %}
+<h2>Reading</h2>
+{% for a in adjustments %}
+<div class="card">
+  <div class="row">
+    <span class="chip {{ a.kind if a.kind in ['proven','strong','contested','folklore'] else a.kind }}">{{ a.kind }}</span>
+    <h3 style="margin:0">{{ a.target }}</h3>
+  </div>
+  <p class="claim">{{ a.reason }}</p>
+  <p class="k">{% for e in a.evidence_ids %}<span class="chip">{{ e }}</span> {% endfor %}
+    {% if not a.evidence_ids %}no playbook claim attached{% endif %}</p>
+</div>
+{% endfor %}
+{% if plan %}
+<form method="post" action="/numbers/apply">
+  <button type="submit">Apply to the remaining weeks</button>
+  <span class="k">A week you already lived stays as evidence; only future weeks change.</span>
+</form>
+{% endif %}
+{% elif note %}
+<p class="sub">Nothing to read yet.</p>
+{% endif %}
+{% endblock %}

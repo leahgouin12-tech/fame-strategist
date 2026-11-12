@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Your strategist</h1>
+<p class="sub">It reads what is actually documented about growth, tells you what is contested, and
+turns that into tomorrow's shot list. It cannot post for you, and it will not touch your followers.</p>
+
+{% if not has_interview %}
+<div class="card">
+  <h3>One click, then you're working today</h3>
+  <p class="sub">This adopts the assumptions below, ranks the niches, builds the eight weeks and opens
+    today's shot list. Nothing is locked in &mdash; change any line later on the interview screen.</p>
+
+  <label>Optional: what do you actually have footage of? (this is the only thing it can't assume)</label>
+  <form method="post" action="/start">
+    <input type="text" name="what_you_actually_film" placeholder="e.g. outfits in my room, the odd street clip">
+    <button type="submit" class="btn">Set it up and show me today</button>
+  </form>
+
+  <p class="k">Assuming:</p>
+  <ul class="assume">
+    {% for a in assumptions %}<li>{{ a }}</li>{% endfor %}
+  </ul>
+  <p class="k">or <a href="/interview">answer the eight questions yourself</a> &mdash; the plan is sized
+    to the hours, so an honest number beats a flattering one.</p>
+</div>
+{% else %}
+<div class="grid">
+  <div class="card">
+    <h3>Today</h3>
+    {% if today %}
+    <p class="claim">{{ today.hook }}</p>
+    <p class="k">{{ today.shots|length }} shots &middot; {{ today.format }}</p>
+    <a class="btn ghost" href="/today">Open the shot list</a>
+    {% else %}
+    <p class="sub">No plan yet.</p>
+    <a class="btn ghost" href="/plan">Build the plan</a>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h3>Plan</h3>
+    <p class="sub">{% if plan %}8 weeks: 4 experiments, then concentrate on {{ plan.chosen }}.{% else %}Eight weeks, decided by your own numbers rather than by advice.{% endif %}</p>
+    <a class="btn ghost" href="/plan">{% if plan %}View the plan{% else %}Build it{% endif %}</a>
+  </div>
+  <div class="card">
+    <h3>Numbers</h3>
+    <p class="sub">Type three numbers per post &mdash; views, watched %, follows. Below 8 posts it will
+    tell you it has no evidence rather than invent a conclusion.</p>
+    <a class="btn ghost" href="/numbers">Enter numbers</a>
+  </div>
+  <div class="card">
+    <h3>Sources</h3>
+    <p class="sub">Every claim this app will act on, with who says it and what it does <em>not</em> prove.</p>
+    <a class="btn ghost" href="/sources">{{ entry_count }} claims</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

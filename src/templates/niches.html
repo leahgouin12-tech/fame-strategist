@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Niches &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Niche hypotheses, ranked</h1>
+<p class="sub">These are hypotheses, not verdicts. Each score is arithmetic over the sourced playbook
+plus your answers, so you can disagree with a number by looking at the claim behind it.
+Weighting: fit 40%, how well-evidenced the crowding read is 30%, your production capacity 30%.</p>
+
+{% if not hypotheses %}
+<div class="card"><p class="sub">No hypotheses yet &mdash;
+  <a href="/interview">take the interview</a> first.</p></div>
+{% endif %}
+
+{% for h in hypotheses %}{% set b = briefs[loop.index0] %}
+<div class="card">
+  <div class="row">
+    <h3>{{ h.name }}</h3>
+    <span class="big">{{ h.total }}</span>
+    <span class="k">total</span>
+  </div>
+  <div class="row">
+    <span class="k">fit</span><span class="meter" style="flex:1"><i style="width:{{ (h.fit_score * 100)|round }}%"></i></span><span>{{ h.fit_score }}</span>
+  </div>
+  <div class="row">
+    <span class="k">saturation read</span><span class="meter" style="flex:1"><i style="width:{{ (h.saturation_score * 100)|round }}%"></i></span><span>{{ h.saturation_score }}</span>
+  </div>
+  <div class="row">
+    <span class="k">your supply</span><span class="meter" style="flex:1"><i style="width:{{ (h.supply_score * 100)|round }}%"></i></span><span>{{ h.supply_score }}</span>
+  </div>
+  <p class="limit">{{ b.risk }}</p>
+  <p class="k">built on
+    {% for e in h.evidence_ids[:6] %}<span class="chip">{{ e }}</span> {% endfor %}
+    {% if h.evidence_ids|length > 6 %}<span class="chip">+{{ h.evidence_ids|length - 6 }} more in Sources</span>{% endif %}
+    {% if not h.evidence_ids %}<span class="chip contested">nothing sourced yet</span>{% endif %}
+  </p>
+</div>
+{% endfor %}
+
+{% if hypotheses %}
+<form method="post" action="/plan/build">
+  <button type="submit">Build the 8-week plan around {{ hypotheses[0].name }}</button>
+</form>
+{% endif %}
+{% endblock %}

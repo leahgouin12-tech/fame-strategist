@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Interview &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>The interview</h1>
+<p class="sub">Nothing here is a formality: hours, gear and what you are willing to film decide which
+niches are even possible for you. Left blank, the app asks again instead of guessing.</p>
+
+{% if need %}
+<div class="need">
+  <strong>Still needed:</strong>
+  <ul>{% for n in need %}<li>{{ n }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post" action="/interview">
+  <label>Hours per week you can actually spend (minimum 2)</label>
+  <input type="number" name="hours_per_week" min="0" step="1" value="{{ v.hours_per_week }}">
+
+  <label>Followers you have now (0 is a real answer)</label>
+  <input type="number" name="existing_followers" min="0" step="1" value="{{ v.existing_followers }}">
+
+  <label>What you film today, in your own words</label>
+  <textarea name="what_you_actually_film">{{ v.what_you_actually_film }}</textarea>
+
+  <label>Gear</label>
+  <select name="gear">
+    {% for g in ['phone', 'phone + tripod + light', 'camera', 'camera + audio'] %}
+    <option value="{{ g }}" {{ 'selected' if v.gear == g }}>{{ g }}</option>
+    {% endfor %}
+  </select>
+
+  <label>Do you already have clips or photos to work from?</label>
+  <div class="checks"><span><input type="checkbox" name="has_clips" {{ 'checked' if v.has_clips }}> yes</span></div>
+
+  <label>Are you willing to be on camera and speak?</label>
+  <div class="checks"><span><input type="checkbox" name="on_camera" {{ 'checked' if v.on_camera }}> yes</span></div>
+
+  <label>Where you are posting (pick all that apply)</label>
+  <div class="checks">
+    {% for p in ['tiktok', 'reels', 'shorts', 'x'] %}
+    <span><input type="checkbox" name="platforms" value="{{ p }}" {{ 'checked' if p in v.platforms }}> {{ p }}</span>
+    {% endfor %}
+  </div>
+
+  <label>What you are comfortable doing</label>
+  <div class="checks">
+    {% for c in ['talking', 'voiceover', 'text on screen', 'hands only', 'walking tour', 'screen recording'] %}
+    <span><input type="checkbox" name="comfort" value="{{ c }}" {{ 'checked' if c in v.comfort }}> {{ c }}</span>
+    {% endfor %}
+  </div>
+
+  <button type="submit">Save and score the niches</button>
+</form>
+{% endblock %}

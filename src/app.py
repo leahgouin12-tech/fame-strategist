@@ -1,0 +1,268 @@
+from datetime import date
+from pathlib import Path
+
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from src.config import Config
+from src.db import DB
+from src.engines.offline import OfflineEngine
+from src.metrics.adapt import analyse, apply
+from src.metrics.ingest import read_csv, read_quick
+from src.playbook.store import Store
+from src.strategist.daily import build_day
+from src.strategist.interview import Interview, InterviewAnswers
+from src.strategist.niche import brief, rank, score_candidates
+from src.strategist.plan import Plan, compose_plan
+
+ROOT = Path(__file__).resolve().parent.parent
+PLAYBOOK_DIR = ROOT / "data" / "playbook"
+DATA_DIR = ROOT / "data"
+
+DISCLAIMER = (
+    "This cannot promise growth, followers, or reach. It states what is documented, what is "
+    "contested, and what nobody has measured - then plans around your own numbers."
+)
+
+
+def load_playbook():
+    entries = Store().load(PLAYBOOK_DIR, allow_pending=True)
+    pending = [e.id for e in entries if e.has_placeholder_source()]
+    return entries, pending
+
+
+def parse_answers(form) -> InterviewAnswers:
+    def flag(name):
+        return form.get(name) in ("on", "true", "1")
+
+    followers = form.get("existing_followers", "")
+    return InterviewAnswers(
+        hours_per_week=int(form.get("hours_per_week", 0) or 0),
+        on_camera=flag("on_camera"),
+        has_clips=flag("has_clips"),
+        gear=form.get("gear", ""),
+        platforms=list(form.getlist("platforms")),
+        comfort=list(form.getlist("comfort")),
+        existing_followers=int(followers) if str(followers).strip() != "" else 0,
+        what_you_actually_film=form.get("what_you_actually_film", ""),
+    )
+
+
+def create_app(config: Config | None = None, db_path: Path | None = None) -> FastAPI:
+    config = config or Config.load()
+    engine = config.build_engine()
+    db = DB(db_path or DATA_DIR / "app.sqlite3")
+    state_dir = Path(db_path or DATA_DIR / "app.sqlite3").parent
+    templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+    app = FastAPI(title="Fame Strategist", docs_url=None, redoc_url=None)
+    app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+    app.state.engine = engine
+    app.state.db = db
+    app.state.config = config
+
+    def page(request, name, **ctx):
+        entries, pending = load_playbook()
+        return templates.TemplateResponse(
+            request,
+            name,
+            {
+                "active": name.removesuffix(".html"),
+                "engine_name": engine.name,
+                "offline": engine.name == "offline",
+                "disclaimer": DISCLAIMER,
+                "entry_count": len(entries),
+                "pending_count": len(pending),
+                **ctx,
+            },
+        )
+
+    def plan_or_none():
+        raw = db.get_current_plan()
+        return Plan.from_dict(raw) if raw else None
+
+    def interview_view(answers=None, form=None):
+        v = {
+            "hours_per_week": "", "existing_followers": "", "what_you_actually_film": "",
+            "gear": "phone", "has_clips": False, "on_camera": False, "platforms": [], "comfort": [],
+        }
+        if answers is not None:
+            for key in v:
+                v[key] = getattr(answers, key)
+        if form is not None:
+            try:
+                a = parse_answers(form)
+            except (ValueError, TypeError):
+                return v
+            v.update({"hours_per_week": a.hours_per_week, "existing_followers": a.existing_followers,
+                      "what_you_actually_film": a.what_you_actually_film, "gear": a.gear,
+                      "has_clips": a.has_clips, "on_camera": a.on_camera,
+                      "platforms": a.platforms, "comfort": a.comfort})
+        return v
+
+    @app.get("/", response_class=HTMLResponse)
+    def home(request: Request):
+        answers = db.get_interview()
+        plan = plan_or_none()
+        today = build_day(plan, load_playbook()[0], answers, date.today(), engine) if plan and answers and Interview.complete(answers) else None
+        return page(
+            request, "home.html",
+            has_interview=answers is not None and Interview.complete(answers),
+            assumptions=Interview.assumptions(Interview.defaults()),
+            plan=plan, today=today,
+            next_step=("Take the interview" if not answers or not Interview.complete(answers)
+                       else "Build the plan" if plan is None else "Open today"),
+        )
+
+    @app.post("/start", response_class=HTMLResponse)
+    async def start(request: Request):
+        """One click: adopt the stated assumptions, rank niches, build the 8 weeks,
+        land on today. Nothing here is a secret - the card that offered it listed them."""
+        form = await request.form()
+        footage = str(form.get("what_you_actually_film", "") or "")
+        answers = Interview.defaults(footage)
+        db.save_interview(answers)
+        entries, _pending = load_playbook()
+        hypotheses = rank(score_candidates(entries, answers))
+        plan = compose_plan(entries, answers, hypotheses, OfflineEngine(), date.today())
+        db.save_current_plan(plan.to_dict())
+        return today(request)
+
+    @app.get("/interview", response_class=HTMLResponse)
+    def interview_form(request: Request):
+        return page(request, "interview.html", v=interview_view(db.get_interview()), need=[])
+
+    @app.post("/interview", response_class=HTMLResponse)
+    async def interview_save(request: Request):
+        form = await request.form()
+        try:
+            answers = parse_answers(form)
+        except (ValueError, TypeError) as exc:
+            return page(request, "interview.html", v=interview_view(), need=[str(exc)])
+        need = Interview.checklist(answers)
+        if need:
+            return page(request, "interview.html", v=interview_view(form=form), need=need)
+        db.save_interview(answers)
+        return niches(request)
+
+    @app.get("/niches", response_class=HTMLResponse)
+    def niches(request: Request):
+        answers = db.get_interview()
+        if not answers or not Interview.complete(answers):
+            return page(request, "interview.html", v=interview_view(),
+                        need=["take the interview first"])
+        entries, _pending = load_playbook()
+        hypotheses = rank(score_candidates(entries, answers))
+        return page(
+            request, "niches.html", answers=answers, hypotheses=hypotheses,
+            briefs=[brief(h) for h in hypotheses], chosen=None,
+        )
+
+    @app.post("/plan/build", response_class=HTMLResponse)
+    def build_plan(request: Request):
+        answers = db.get_interview()
+        entries, _pending = load_playbook()
+        hypotheses = rank(score_candidates(entries, answers))
+        plan = compose_plan(entries, answers, hypotheses, OfflineEngine(), date.today())
+        db.save_current_plan(plan.to_dict())
+        return page(request, "plan.html", plan=plan, entries=entries)
+
+    @app.get("/plan", response_class=HTMLResponse)
+    def show_plan(request: Request):
+        plan = plan_or_none()
+        if plan is None:
+            return niches(request)
+        return page(request, "plan.html", plan=plan, entries=load_playbook()[0])
+
+    @app.get("/today", response_class=HTMLResponse)
+    def today(request: Request, on: str | None = None):
+        answers, plan = db.get_interview(), plan_or_none()
+        if not answers or not plan:
+            return home(request)
+        day = date.fromisoformat(on) if on else date.today()
+        entries, _pending = load_playbook()
+        d = build_day(plan, entries, answers, day, engine)
+        logged = db.get_days(day.isoformat(), day.isoformat())
+        return page(request, "today.html", today=d, plan=plan, answers=answers,
+                    posted=bool(logged and logged[0]["done"]), day_iso=day.isoformat())
+
+    @app.post("/today/done", response_class=HTMLResponse)
+    def today_done(request: Request, on: str = Form(...)):
+        db.save_day(on, {"posted": True})
+        db.mark_done(on)
+        return today(request, on=on)
+
+    @app.get("/sources", response_class=HTMLResponse)
+    def sources(request: Request, tier: str | None = None):
+        entries, pending = load_playbook()
+        counts = {t: len([e for e in entries if e.confidence.value == t])
+                  for t in ["proven", "strong", "contested", "folklore"]}
+        shown = [e for e in entries if e.confidence.value == tier] if tier in counts else entries
+        return page(request, "sources.html", entries=shown, all_entries=entries, pending=pending,
+                    counts=counts, tier=tier)
+
+    def store_rows(rows) -> None:
+        """Normalised to the app's own CSV so the apply step re-reads exactly what was read now."""
+        state_dir.mkdir(exist_ok=True)
+        lines = ["post_ref,views,avg_watch_pct,follows_gained,hypothesis"]
+        lines += [
+            f"{r.post_ref},{r.views},{r.avg_watch_pct},{r.follows_gained},{r.hypothesis}"
+            for r in rows
+        ]
+        (state_dir / "metrics-last.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def numbers_page(request, rows=None, note=""):
+        plan = plan_or_none()
+        if rows is None:
+            return page(request, "numbers.html", adjustments=[], plan=plan, note=note, rows=[])
+        return page(
+            request, "numbers.html", adjustments=analyse(rows, plan) if plan else [],
+            plan=plan, note=note, rows=rows,
+        )
+
+    @app.get("/numbers", response_class=HTMLResponse)
+    def numbers(request: Request):
+        return numbers_page(request)
+
+    @app.post("/numbers", response_class=HTMLResponse)
+    async def numbers_input(request: Request):
+        form = await request.form()
+        if plan_or_none() is None:
+            return numbers_page(request, note="Build a plan first, then the reading has something to change.")
+        quick = str(form.get("quick", "") or "").strip()
+        upload = form.get("csv")
+        if quick:
+            try:
+                rows = read_quick(quick)
+            except ValueError as exc:
+                return numbers_page(request, note=str(exc))
+        elif hasattr(upload, "read"):
+            state_dir.mkdir(exist_ok=True)
+            path = state_dir / "metrics-last.csv"
+            path.write_bytes(await upload.read())
+            try:
+                rows = read_csv(path)
+            except ValueError as exc:
+                return numbers_page(request, note=str(exc))
+        else:
+            return numbers_page(request, note="Type the three numbers, or drop a CSV.")
+        store_rows(rows)
+        return numbers_page(request, rows=rows, note=f"{len(rows)} posts read.")
+
+    @app.post("/numbers/apply", response_class=HTMLResponse)
+    async def numbers_apply(request: Request):
+        plan = plan_or_none()
+        path = state_dir / "metrics-last.csv"
+        if plan is None or not path.exists():
+            return page(request, "numbers.html", adjustments=[], plan=plan, note="Nothing to apply yet.", rows=[])
+        adjustments = analyse(read_csv(path), plan)
+        changed = apply(plan, adjustments)
+        db.save_current_plan(changed.to_dict())
+        return page(request, "plan.html", plan=changed, entries=load_playbook()[0])
+
+    return app
+
+
+app = create_app()

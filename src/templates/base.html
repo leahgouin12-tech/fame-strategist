@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Fame Strategist{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">Fame&nbsp;Strategist</div>
+    <nav>
+      <a href="/today" class="{{ 'on' if active == 'today' }}">Today</a>
+      <a href="/plan" class="{{ 'on' if active == 'plan' }}">Plan</a>
+      <a href="/niches" class="{{ 'on' if active == 'niches' }}">Niches</a>
+      <a href="/numbers" class="{{ 'on' if active == 'numbers' }}">Numbers</a>
+      <a href="/sources" class="{{ 'on' if active == 'sources' }}">Sources</a>
+    </nav>
+  </header>
+
+  {% if offline %}
+  <p class="banner">Running without a model key, and nothing is missing because of it: plans, scores,
+    shot lists, hooks and captions are all written here. A key only changes <em>who words the hook</em> &mdash;
+    optional, and never required to use this.</p>
+  {% endif %}
+  {% if pending_count %}
+  <p class="banner warn">{{ pending_count }} of {{ entry_count }} playbook claims still have an
+    unverified source. <a href="/sources">See which</a>.</p>
+  {% endif %}
+
+  <main>
+    {% block body %}{% endblock %}
+  </main>
+
+  <footer class="bar foot">
+    <span>{{ entry_count }} sourced claims loaded</span>
+    <span>engine: {{ engine_name }}</span>
+    <span class="dis">{{ disclaimer }}</span>
+  </footer>
+</body>
+</html>

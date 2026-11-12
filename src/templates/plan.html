@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Plan &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>The 8-week plan</h1>
+<p class="sub">Weeks 1-4 are experiments run one hypothesis at a time. Weeks 5-8 concentrate on
+whatever your own numbers rewarded. Every week has a test that can prove it wrong.</p>
+
+{% if not plan %}
+<div class="card"><p class="sub">No plan yet. <a href="/niches">Rank the niches</a> and build one.</p></div>
+{% else %}
+<div class="card">
+  <h3>Why it only commits to experiments first</h3>
+  <p class="claim">{{ plan.first_two_weeks_only_reason }}</p>
+  <p class="k">Chosen hypothesis after the experiment phase: <strong>{{ plan.chosen }}</strong>
+    &middot; started {{ plan.start_date }}</p>
+</div>
+
+<table>
+  <tr><th>Wk</th><th>Goal</th><th>Posts</th><th>What is being tested</th><th>How this week fails</th></tr>
+  {% for w in plan.weeks %}
+  <tr>
+    <td>{{ w.week_no }}</td>
+    <td>{{ w.goal }}</td>
+    <td>{{ w.target_posts }}</td>
+    <td>{{ w.experiment }}</td>
+    <td>{{ w.success_test }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p class="k">Every week is built from these playbook claims:
+  {% for e in plan.weeks[0].focus_entry_ids %}<a href="/sources"><span class="chip">{{ e }}</span></a> {% endfor %}</p>
+
+<p><a class="btn" href="/today">Open today's shot list</a>
+   <a class="btn ghost" href="/numbers">Import what actually happened</a></p>
+{% endif %}
+{% endblock %}

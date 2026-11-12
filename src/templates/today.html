@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Today &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>{{ today.date }}</h1>
+<p class="sub">Week {{ today.week_no }} &middot; testing <strong>{{ today.hypothesis }}</strong>
+  &middot; format {{ today.format }}</p>
+
+<div class="card">
+  <h2 style="margin-top:0">Say this first</h2>
+  <p class="big" style="font-size:22px;line-height:1.35">{{ today.hook }}</p>
+  <p class="k">{{ today.cost_note }}</p>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Shots &mdash; {{ today.shots|length }} takes, {{ (today.shots|sum(attribute='seconds')) }}s of filming</h3>
+    <ol class="shots">
+      {% for s in today.shots %}
+      <li>{{ s.desc }}<br><span class="k">{{ s.framing }} &middot; {{ s.seconds }}s &middot; {{ s.note }}</span></li>
+      {% endfor %}
+    </ol>
+  </div>
+  <div class="card">
+    <h3>The beats it has to hit</h3>
+    <ul>{% for b in today.beats %}<li>{{ b }}</li>{% endfor %}</ul>
+    <h3>Caption</h3>
+    <p class="claim">{{ today.caption }}</p>
+    <h3>Tags</h3>
+    <p>{% for t in today.hashtags %}<span class="chip">{{ t }}</span> {% endfor %}</p>
+    <p class="k">#fyp-style tags are refused; they carry no signal and cost a slot.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Why this day looks like this</h3>
+  <p class="k">Built from
+    {% for e in today.sourced_from %}<a href="/sources"><span class="chip">{{ e }}</span></a> {% endfor %}
+    {% if not today.sourced_from %}<span class="chip contested">no source attached - treat as a draft</span>{% endif %}
+  </p>
+  <form method="post" action="/today/done">
+    <input type="hidden" name="on" value="{{ day_iso }}">
+    {% if posted %}
+    <span class="chip proven">marked posted</span>
+    <p class="k">This day is now evidence. The plan will not rewrite a week you already lived.</p>
+    {% else %}
+    <button type="submit">Mark as posted</button>
+    <span class="k">Not marked posted yet.</span>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

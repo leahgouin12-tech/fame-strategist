@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+config.toml
+data/*.sqlite3
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+data/metrics-last.csv
+data/*.log
+.pytest_cache/
+visualizationOutputDirectory/

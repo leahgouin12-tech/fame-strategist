@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Sources &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>What this app is allowed to believe</h1>
+<p class="sub">{{ entry_count }} claims. The claim and its limit are always shown; why it is believed
+and who said it open on click. Advice without a source is refused at load time, so this page is the
+whole product surface.</p>
+
+<p class="row">
+  <a class="chip {{ 'on' if not tier }}" href="/sources">all {{ entry_count }}</a>
+  {% for t in ['proven', 'strong', 'contested', 'folklore'] %}
+  <a class="chip {{ t }} {{ 'on' if tier == t }}" href="/sources?tier={{ t }}">{{ t }} {{ counts[t] }}</a>
+  {% endfor %}
+</p>
+
+{% for group_tier in ['proven', 'strong', 'contested', 'folklore'] %}
+{% set group = entries | selectattr('confidence.value', 'equalto', group_tier) | list %}
+{% if group %}
+<h2>{{ group_tier }} &mdash; {{ group|length }}</h2>
+{% for e in group %}
+<div class="card">
+  <div class="row">
+    <span class="chip {{ group_tier }}">{{ group_tier }}</span>
+    <span class="k">{{ e.as_of }} &middot; {{ e.applies_to|join(', ') }}</span>
+  </div>
+  <p class="claim"><strong>{{ e.claim }}</strong></p>
+  <p class="limit"><strong>Does not establish:</strong> {{ e.does_not_claim }}</p>
+  <details>
+    <summary>why it is believed &middot; {{ e.sources|length }}
+      {% if e.sources|length == 1 %}source{% else %}sources{% endif %} &middot; {{ e.id }}</summary>
+    <p class="k">{{ e.mechanism }}</p>
+    <ul>
+      {% for s in e.sources %}
+      <li><a href="{{ s.url }}">{{ s.title }}</a> <span class="chip">{{ s.tier.value }}</span></li>
+      {% endfor %}
+    </ul>
+    <p class="k">{% for t in e.tags %}{{ t }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  </details>
+</div>
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+{% if pending %}
+<h2>Unverified</h2>
+<div class="card"><p class="k">{% for id in pending %}<span class="chip contested">{{ id }}</span> {% endfor %}</p></div>
+{% endif %}
+{% endblock %}
