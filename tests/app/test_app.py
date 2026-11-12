@@ -152,3 +152,64 @@ def test_the_app_binds_nothing_public(client):
     paths = {getattr(r, "path", "") for r in client.app.routes}
     assert not any(p.startswith("/media") or "public" in p for p in paths)
     assert not any("follow" in p for p in paths)
+
+
+def _inbox_client(tmp_path):
+    from PIL import Image, ImageDraw
+
+    app = create_app(Config(api_key=None, engine_name="offline", model=""), tmp_path / "a.sqlite3")
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(exist_ok=True)
+    for name, size in [("sharp.png", (1080, 1920)), ("wide.png", (2000, 1200))]:
+        im = Image.new("RGB", size, (240, 240, 240))
+        ImageDraw.Draw(im).rectangle([40, 40, size[0] // 2, size[1] // 2], fill=(20, 20, 20))
+        im.save(inbox / name)
+    return TestClient(app)
+
+
+def _tilted_inbox(tmp_path):
+    """A tilted horizon in the inbox, so the one-click fix has something to straighten."""
+    import math
+
+    from PIL import Image, ImageDraw
+
+    client = _inbox_client(tmp_path)
+    inbox = tmp_path / "inbox"
+    for stale in inbox.glob("*"):
+        stale.unlink()
+    im = Image.new("RGB", (1080, 1920), (122, 88, 52))
+    drift = math.tan(math.radians(4)) * 1080 / 2
+    ImageDraw.Draw(im).polygon([(0, 0), (1080, 0), (1080, 960 + drift), (0, 960 - drift)],
+                               fill=(86, 148, 224))
+    im.save(inbox / "tilt.png")
+    return client
+
+
+def test_photos_reads_the_folder_she_drops_files_into(tmp_path):
+    client = _inbox_client(tmp_path)
+    body = client.get("/photos").text
+    assert client.get("/photos").status_code == 200
+    assert "sharp.png" in body and "wide.png" in body
+    assert "crop" in body, "the off-shape file must be offered a crop"
+    assert "Does not establish" in body
+
+
+def test_the_fix_button_writes_a_copy_and_reports_both_scores(tmp_path):
+    client = _tilted_inbox(tmp_path)
+    body = client.post("/photos/clean", data={"name": "tilt.png"}).text
+    assert "tilt-clean.jpg" in body
+    assert "score" in body, "she must see what the fix actually changed"
+    assert (tmp_path / "inbox" / "clean" / "tilt-clean.jpg").is_file()
+    assert (tmp_path / "inbox" / "tilt.png").is_file(), "the original stays put"
+
+
+def test_photos_tells_her_where_to_drop_files_when_it_is_empty(client, tmp_path):
+    body = client.get("/photos").text
+    assert str(tmp_path / "inbox") in body
+    assert "Nothing to read yet" in body
+
+
+def test_the_clean_button_cannot_reach_outside_the_inbox(client, tmp_path):
+    (tmp_path / "outside.png").write_bytes(b"x")
+    body = client.post("/photos/clean", data={"name": "../outside.png"}).text
+    assert "not in the inbox folder" in body

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Photos &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Photos</h1>
+<p class="sub">Drop the files you are deciding on into <code>{{ inbox }}</code>. Each frame is measured
+&mdash; where the detail sits, whether the strongest line is level, how much of the palette the file
+actually uses, how quiet the edges are &mdash; then scored out of 10.</p>
+
+<div class="need"><strong>It scores the frame, not you.</strong> No face, skin or body is measured or
+ranked, and the editor only moves or brightens what the camera already recorded. It cannot add detail
+that was never captured, and a high score is not a promise about reach.</div>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+
+{% if readings %}
+<div class="row">
+  {% for v in ['post', 'fix', 'skip', 'unreadable'] %}
+  {% set n = readings | selectattr('r.verdict', 'equalto', v) | list | length %}
+  {% if n %}<span class="chip {{ v }}">{{ v }} {{ n }}</span>{% endif %}
+  {% endfor %}
+  <span class="chip">weights: placement 30 &middot; level 20 &middot; breathing 20 &middot; palette 15
+    &middot; focus 15 &mdash; this app's opinion, not a platform's</span>
+</div>
+
+{% for row in readings %}
+{% set r = row.r %}{% set j = row.j %}
+<div class="card shot">
+  {% if not r.error %}<img class="thumb" src="/inbox/{{ r.name | urlencode }}" alt="{{ r.name }}">{% endif %}
+  <div class="shotbody">
+    <div class="row">
+      {% if j %}<span class="big">{{ j.score }}</span><span class="k">/ 10 &middot; {{ j.band }}</span>{% endif %}
+      <span class="chip {{ r.verdict }}">{{ r.verdict }}</span>
+      <span class="k">{{ r.width }}&times;{{ r.height }} &middot; nearest {{ r.target }} &middot;
+        light {{ r.exposure }}</span>
+    </div>
+    <p class="claim"><strong>{{ r.name }}</strong></p>
+
+    {% if j %}
+    <table class="parts">
+      {% for c in j.components | sort(attribute='score') %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="bar"><div class="meter"><i style="width: {{ (c.score * 100) | round }}%"></i></div></td>
+        <td class="k">{{ c.why }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if r.flags %}
+    <ul class="assume">{% for f in r.flags %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% elif not r.error %}
+    <p class="k">No file-level flag: even tone, in format, enough pixels.</p>
+    {% endif %}
+
+    {% if j and j.ideas %}
+    <p class="k"><strong>How to fix it</strong></p>
+    <ul class="assume">{% for i in j.ideas %}<li>{{ i }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <p class="limit"><strong>Does not establish:</strong> {{ r.limit }}</p>
+
+    {% if j and j.fixes %}
+    <form method="post" action="/photos/clean">
+      <input type="hidden" name="name" value="{{ r.name }}">
+      <button type="submit">Fix it &mdash; {{ j.fixes | join(' + ') }}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="card">
+  <p class="claim"><strong>Nothing to read yet.</strong></p>
+  <p>Drop photos or screenshots into <code>{{ inbox }}</code> and reload this page. They stay in that
+    folder; the app only opens them to measure.</p>
+  <p class="k">Video clips are not measured here &mdash; this machine has no decoder installed, and a
+    guessed number would be worse than none.</p>
+</div>
+{% endif %}
+{% endblock %}

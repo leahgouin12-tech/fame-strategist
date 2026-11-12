@@ -11,6 +11,9 @@ from src.db import DB
 from src.engines.offline import OfflineEngine
 from src.metrics.adapt import analyse, apply
 from src.metrics.ingest import read_csv, read_quick
+from src.media.aesthetic import WEIGHTS, judge_photo
+from src.media.clean import fix
+from src.media.judge import inbox_files, judge, measure
 from src.playbook.store import Store
 from src.strategist.daily import build_day
 from src.strategist.interview import Interview, InterviewAnswers
@@ -59,6 +62,9 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
 
     app = FastAPI(title="Fame Strategist", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+    inbox_dir = state_dir / "inbox"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/inbox", StaticFiles(directory=str(inbox_dir)), name="inbox")
     app.state.engine = engine
     app.state.db = db
     app.state.config = config
@@ -112,6 +118,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             has_interview=answers is not None and Interview.complete(answers),
             assumptions=Interview.assumptions(Interview.defaults()),
             plan=plan, today=today,
+            inbox=str(inbox_dir), photo_count=len(inbox_files(inbox_dir)),
             next_step=("Take the interview" if not answers or not Interview.complete(answers)
                        else "Build the plan" if plan is None else "Open today"),
         )
@@ -261,6 +268,36 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         changed = apply(plan, adjustments)
         db.save_current_plan(changed.to_dict())
         return page(request, "plan.html", plan=changed, entries=load_playbook()[0])
+
+    def inbox_file(name: str) -> Path | None:
+        target = (inbox_dir / name).resolve()
+        if target.parent != inbox_dir.resolve() or not target.is_file():
+            return None
+        return target
+
+    @app.get("/photos", response_class=HTMLResponse)
+    def photos(request: Request, note: str = ""):
+        rows = [{"r": r, "j": judge_photo(inbox_dir / r.name, r) if not r.error else None}
+                for r in judge(inbox_files(inbox_dir))]
+        return page(request, "photos.html", readings=rows, inbox=str(inbox_dir), note=note,
+                    weights=WEIGHTS)
+
+    @app.post("/photos/clean", response_class=HTMLResponse)
+    async def photos_clean(request: Request):
+        form = await request.form()
+        src = inbox_file(str(form.get("name", "")))
+        if src is None:
+            return photos(request, note="That file is not in the inbox folder.")
+        judged = judge_photo(src, measure(src))
+        fixes = judged.fixes or judged.reading.fixes
+        if not fixes:
+            return photos(request, note="Nothing left for the editor to do - that frame is already clean.")
+        dst = fix(src, inbox_dir / "clean", fixes, tilt=judged.tilt, focus=judged.focus)
+        after = judge_photo(dst, measure(dst))
+        moved = (f"score {judged.score} to {after.score}" if after.score != judged.score
+                 else f"score still {judged.score}")
+        return photos(request, note=f"Wrote {dst.name} with {' + '.join(fixes)} - {moved}. "
+                                    "The original was not touched.")
 
     return app
 

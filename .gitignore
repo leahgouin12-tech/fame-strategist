@@ -6,6 +6,7 @@ data/*.sqlite3
 data/*.sqlite3-wal
 data/*.sqlite3-shm
 data/metrics-last.csv
+data/inbox/
 data/*.log
 .pytest_cache/
 visualizationOutputDirectory/

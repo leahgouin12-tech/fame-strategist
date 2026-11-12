@@ -48,6 +48,12 @@ turns that into tomorrow's shot list. It cannot post for you, and it will not to
     <a class="btn ghost" href="/numbers">Enter numbers</a>
   </div>
   <div class="card">
+    <h3>Photos</h3>
+    <p class="sub">Drop shots into <code>{{ inbox }}</code> and it measures light, detail, shape and
+      pixels &mdash; then says which to post, which to skip, and what a fix can honestly do.</p>
+    <a class="btn ghost" href="/photos">{% if photo_count %}Read {{ photo_count }} file{{ '' if photo_count == 1 else 's' }}{% else %}Open the photo inbox{% endif %}</a>
+  </div>
+  <div class="card">
     <h3>Sources</h3>
     <p class="sub">Every claim this app will act on, with who says it and what it does <em>not</em> prove.</p>
     <a class="btn ghost" href="/sources">{{ entry_count }} claims</a>
