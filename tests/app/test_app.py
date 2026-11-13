@@ -411,7 +411,7 @@ def test_the_coach_shows_the_dated_sources_behind_the_current_slots(planned):
 
 def test_the_coach_costs_nothing_and_says_so(planned):
     body = planned.get("/weekly").text
-    assert "0 model credits" in body and "all local CPU" in body
+    assert "0 model calls on record" in body and "all local CPU" in body
 
 
 SAMPLES = ("i did this thing today and it went badly lol #outfit\n\n"
@@ -570,3 +570,109 @@ def test_twenty_timed_posts_replace_the_default_with_her_own_windows(planned):
     assert "<th>Median views</th>" in body
     assert "evening against morning" in body
     assert "myth-best-time-to-post-chart" not in body, "the vendor refusal is the default, not the answer"
+
+
+PARTS = ["placement", "level", "breathing", "palette", "focus"]
+
+
+def _scored(planned, n=8, follows=None):
+    """Files this app scored before she posted, plus the numbers their audiences left. The
+    reference is the file name, because that is the only key the two sides share."""
+    follows = follows or (lambda i: i + 1)
+    for i in range(n):
+        planned.app.state.db.save_score(
+            f"p{i}", "photo", round(4 + i * 0.5, 1),
+            "strong" if 4 + i * 0.5 >= 7 else "workable", {c: 0.5 for c in PARTS}, "2026-11-01")
+    return "\n".join(f"p{i} {500 + i * 50} {20 + i} {follows(i)}" for i in range(n))
+
+
+def test_the_numbers_page_compares_taste_with_receipts(planned):
+    body = planned.post("/numbers", data={"quick": _scored(planned)}).text
+    assert "carry both halves of the loop" in body
+    assert "what this app liked" in body and "what it scored lower" in body
+    assert "reshuffles of your own numbers" in body, "the size of the link is tested, not reported"
+
+
+def test_below_the_pairing_floor_the_page_names_the_number_it_wants(planned):
+    body = planned.post("/numbers", data={"quick": _scored(planned, 3)}).text
+    assert "8 paired posts is the floor this page will speak at" in body
+    assert "5 more" in body
+    assert "nothing here guesses it for you" in body
+
+
+def test_without_any_scores_the_loop_says_so_rather_than_blaming_planned(planned):
+    body = planned.post("/numbers", data={"quick": "p1 900 30 4"}).text
+    assert "Nothing scored yet" in body
+
+
+def test_a_rubric_the_audience_disagrees_with_is_put_on_the_page(planned):
+    body = planned.post("/numbers", data={"quick": _scored(planned, follows=lambda i: 30 - 3 * i)}).text
+    assert "not buying what the rubric rewards" in body
+    assert "paid less attention" in body
+
+
+def test_a_reweight_is_a_proposal_until_she_presses_it(planned):
+    parts = [{"placement": round(i / 7, 3), "level": round((7 - i) / 7, 3),
+              "breathing": 0.5, "palette": 0.5, "focus": 0.5} for i in range(14)]
+    for i, p in enumerate(parts):
+        planned.app.state.db.save_score(f"p{i}", "photo", round(4 + i * 0.4, 1), "workable",
+                                        p, "2026-11-01")
+    lines = "\n".join(f"p{i} {500 + i * 50} {20 + i} {i + 1}" for i in range(14))
+    body = planned.post("/numbers", data={"quick": lines}).text
+    assert "Accept these weights" in body and "placement" in body
+    assert "the opinion this app shipped with" in body, "nothing has moved yet"
+
+    after = planned.post("/numbers/reweight").text
+    assert "accepted from your own numbers" in after
+    assert "Reset to the shipped weights" in after
+    weights = planned.app.state.db.get_rubric()
+    assert sum(weights.values()) == 1.0 and weights["placement"] > weights["level"]
+
+    back = planned.post("/numbers/reset").text
+    assert "the opinion this app shipped with" in back
+    assert planned.app.state.db.get_rubric() is None
+
+
+def test_accepting_without_a_live_proposal_changes_nothing(planned):
+    body = planned.post("/numbers/reweight").text
+    assert "There was nothing to accept" in body
+    assert planned.app.state.db.get_rubric() is None
+
+
+def test_credits_are_hers_to_state_and_hers_to_leave_empty(planned):
+    body = planned.post("/numbers/credits", data={"credits": "12", "what_for": "3 cut edits"}).text
+    assert "12 credits" in body and "Self-reported by you" in body
+    cleared = planned.post("/numbers/credits", data={"credits": ""}).text
+    assert "empty cell beats an invented zero" in cleared
+    assert "not stated" in cleared
+
+
+def test_the_model_quota_column_is_a_count_not_a_promise(planned):
+    planned.app.state.db.add_model_call()
+    planned.app.state.db.add_model_call()
+    body = planned.post("/numbers", data={"quick": _scored(planned, 4)}).text
+    assert "2 calls" in body and "Counted here" in body
+    assert "0 model calls on record" not in planned.get("/weekly").text
+
+
+def test_local_work_is_listed_and_refused_the_status_of_a_cost(planned):
+    body = planned.get("/numbers").text
+    assert "All local CPU" in body and "not a currency" in body
+    assert "no posts to divide" in body, "nothing divides before there are posts"
+
+
+def test_photos_writes_the_score_the_feedback_loop_needs(tmp_path):
+    client = _inbox_client(tmp_path)
+    client.get("/photos")
+    stored = client.app.state.db.get_scores()
+    assert "sharp" in stored, "the file name without its extension is the key she will type"
+    assert len(stored["sharp"]["parts"]) == 5, "every component has to outlive the page"
+
+
+def test_saving_an_edit_leaves_a_provenance_log_behind(tmp_path):
+    client = _inbox_client(tmp_path)
+    client.post("/edit/save", data={"name": "sharp.png",
+                                    "recipe": json.dumps([["exposure", 0.2], ["contrast", 0.3]])})
+    ops = client.app.state.db.edit_ops()
+    assert [o["op"] for o in ops] == ["exposure", "contrast"], "the log answers the AI question"
+    assert all(o["params"] and o["before_sha"] and o["after_sha"] for o in ops)

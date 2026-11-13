@@ -2,9 +2,10 @@
 
 Every component below is measured from pixels on this machine: where the detail sits,
 whether the horizon is level, how busy the background is, how much of the palette the
-file actually uses. The weights are this app's own opinion, stated on the page, because
-no platform publishes an attractiveness score and a face or body is not something this
-app will rank at all.
+file actually uses. The weights are this app's own opinion until her own numbers argue with
+them - spec 5.9 proposes a change and she accepts it - and they stay stated on the page,
+because no platform publishes an attractiveness score and a face or body is not something
+this app will rank at all.
 """
 
 from dataclasses import dataclass, field
@@ -43,10 +44,11 @@ class Judgement:
     tilt: float = 0.0
     focus: tuple[float, float] = (0.5, 0.5)
     concentration: float = 0.0
+    weights: dict = field(default_factory=lambda: dict(WEIGHTS))
 
     @property
     def score(self) -> float:
-        total = sum(WEIGHTS[c.name] * c.score for c in self.components)
+        total = sum(self.weights.get(c.name, 0.0) * c.score for c in self.components)
         return round(total * 10, 1)
 
     @property
@@ -167,8 +169,8 @@ def _palette(rgb: Image.Image) -> tuple[float, float]:
     return round(saturation, 3), round(top / total, 3)
 
 
-def judge_photo(path: Path, reading: Reading) -> Judgement:
-    j = Judgement(reading=reading)
+def judge_photo(path: Path, reading: Reading, weights: dict | None = None) -> Judgement:
+    j = Judgement(reading=reading, weights=dict(weights or WEIGHTS))
     if reading.error:
         return j
     with Image.open(path) as raw:

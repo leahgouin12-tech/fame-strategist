@@ -19,6 +19,8 @@ from src.engines.offline import OfflineEngine
 from src.media import clip as clipmod
 from src.media.clipjudge import CLIP_LABELS, CLIP_WEIGHTS, judge_clip, suggest
 from src.metrics import churn
+from src.metrics import correlate
+from src.metrics import spend as spendmod
 from src.metrics.adapt import DATA_FLOOR, analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
@@ -121,6 +123,28 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             return read_csv(path)
         except ValueError:
             return []
+
+    def rubric_weights():
+        """The shipped opinion, unless she has accepted a change from her own numbers."""
+        return db.get_rubric() or WEIGHTS
+
+    def remember(src: Path, kind: str, judged) -> None:
+        """Spec 5.9 only works if the judgement written before posting outlives the day it
+        was posted, so every score this app displays is also stored under its file name."""
+        reading = getattr(judged, "reading", None)
+        if reading is not None and reading.error:
+            return
+        parts = {c.name: round(c.score, 3) for c in getattr(judged, "components", [])}
+        if not parts:
+            return
+        db.save_score(correlate.stem(src.stem), kind, judged.score, judged.band, parts,
+                      date.today().isoformat())
+
+    def day_for(answers, plan, day: date):
+        d = build_day(plan, load_playbook()[0], answers, day, engine)
+        if d.copy_origin == "model":
+            db.add_model_call()
+        return d
 
     def interview_view(answers=None, form=None):
         v = {
@@ -246,8 +270,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         if not answers or not plan:
             return home(request)
         day = date.fromisoformat(iso_or_today(on))
-        entries, _pending = load_playbook()
-        d = build_day(plan, entries, answers, day, engine)
+        d = day_for(answers, plan, day)
         logged = db.get_days(day.isoformat(), day.isoformat())
         return page(request, "today.html", today=d, plan=plan, answers=answers,
                     posted=bool(logged and logged[0]["done"]), day_iso=day.isoformat(),
@@ -324,7 +347,8 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         agenda = build_agenda(
             plan=plan, days=db.get_days(start.isoformat(), end.isoformat()), rows=rows,
             landed=landed, weak=weak, entries=load_playbook()[0], today=end,
-            engine_name=engine.name, offline=engine.name == "offline")
+            engine_name=engine.name, offline=engine.name == "offline",
+            spend=db.get_spend())
         return page(request, "weekly.html", agenda=agenda, plan=plan)
 
     @app.get("/write", response_class=HTMLResponse)
@@ -340,7 +364,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                         samples_text=pasted,
                         note=note or "The writer cuts today&rsquo;s line into three platforms. "
                                      "It needs the interview and a plan before it has a line.")
-        day = build_day(plan, load_playbook()[0], answers, date.today(), engine)
+        day = day_for(answers, plan, date.today())
         variants = voice.package(subject_of(answers), day.hypothesis, date.today(), profile)
         return page(request, "write.html", profile=profile, variants=variants, day=day,
                     samples_text=pasted, note=note)
@@ -489,16 +513,66 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
 
     def numbers_page(request, rows=None, note=""):
         plan = plan_or_none()
-        if rows is None:
-            return page(request, "numbers.html", adjustments=[], plan=plan, note=note, rows=[])
+        stored = rows if rows is not None else metrics_rows()
+        scores = db.get_scores()
+        spent = db.get_spend()
         return page(
-            request, "numbers.html", adjustments=analyse(rows, plan) if plan else [],
-            plan=plan, note=note, rows=rows,
+            request, "numbers.html",
+            adjustments=analyse(stored, plan) if (plan and rows is not None) else [],
+            plan=plan, note=note, rows=rows or [],
+            report=correlate.report(scores, stored, rubric_weights()),
+            cost=spendmod.tally(spend=spent, ops=db.edit_ops(), judged=len(scores),
+                                 posts=len(stored), engine_name=engine.name,
+                                 offline=engine.name == "offline"),
+            credits=("" if spent.get("credits") is None else spent["credits"]),
+            credits_note=spent.get("credits_note") or "",
+            weights=rubric_weights(), custom=db.get_rubric() is not None,
         )
 
     @app.get("/numbers", response_class=HTMLResponse)
     def numbers(request: Request):
         return numbers_page(request)
+
+    @app.post("/numbers/credits", response_class=HTMLResponse)
+    async def numbers_credits(request: Request):
+        """The credits column is hers, because nothing in this app can read a Qoder balance."""
+        form = await request.form()
+        raw = str(form.get("credits", "") or "").strip()
+        spent = db.get_spend()
+        if not raw:
+            db.save_spend({**spent, "credits": None, "credits_note": ""})
+            return numbers_page(request, note="Cleared. An empty cell beats an invented zero.")
+        try:
+            credits = float(raw)
+        except ValueError:
+            return numbers_page(request, note="Credits has to be a number, or blank to clear it.")
+        db.save_spend({**spent, "credits": credits,
+                       "credits_note": str(form.get("what_for", "") or "").strip()[:200]})
+        return numbers_page(request, note=(
+            f"Recorded {raw} credits as your statement, not this app's measurement. The per-post "
+            "figure uses the posts on this page, so it moves as you import more."))
+
+    @app.post("/numbers/reweight", response_class=HTMLResponse)
+    def numbers_reweight(request: Request):
+        vector = correlate.accept_vector(correlate.pair(db.get_scores(), metrics_rows()),
+                                         rubric_weights())
+        if vector is None:
+            return numbers_page(request, note=(
+                "There was nothing to accept: your numbers changed, or they still do not separate "
+                "the components. The rubric scoring your frames is the one it had a moment ago."))
+        db.save_rubric(vector)
+        return numbers_page(request, note=(
+            "Your rubric is now " + ", ".join(f"{k} {v:.0%}" for k, v in vector.items())
+            + ". Future scores use it; the scores already stored stay as they were written, "
+            "because they are what you posted under. Reset returns the shipped opinion."))
+
+    @app.post("/numbers/reset", response_class=HTMLResponse)
+    def numbers_reset(request: Request):
+        db.save_rubric({})
+        return numbers_page(request, note=(
+            "Back to the weights this app shipped with: "
+            + ", ".join(f"{k} {v:.0%}" for k, v in WEIGHTS.items())
+            + ". Your own numbers are untouched and will propose again."))
 
     @app.post("/numbers", response_class=HTMLResponse)
     async def numbers_input(request: Request):
@@ -565,14 +639,30 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         edit_file(src, recipe, proxy=edge).save(buf, "JPEG", quality=82 if edge else SAVE_QUALITY)
         return buf.getvalue()
 
+    def log_ops(src: Path, dst: Path, recipe) -> None:
+        """The chain table exists so "this is not an AI image" is a log rather than an
+        assertion, and spec 5.9 counts from the same rows: every operation written into a
+        saved file, with the digest of the file before and after it."""
+        before = hashlib.sha1(src.read_bytes()).hexdigest()[:16]
+        after = hashlib.sha1(dst.read_bytes()).hexdigest()[:16]
+        for entry in recipe:
+            db.log_edit(dst.name, entry[0], entry[1] if len(entry) > 1 else None,
+                        before, after, date.today().isoformat())
+
     @app.get("/photos", response_class=HTMLResponse)
     def photos(request: Request, note: str = ""):
-        rows = [{"r": r, "j": judge_photo(inbox_dir / r.name, r) if not r.error else None}
-                for r in judge(inbox_files(inbox_dir))]
+        custom = db.get_rubric()
+        weights = custom or WEIGHTS
+        rows = []
+        for r in judge(inbox_files(inbox_dir)):
+            j = None if r.error else judge_photo(inbox_dir / r.name, r, weights)
+            if j is not None:
+                remember(inbox_dir / r.name, "photo", j)
+            rows.append({"r": r, "j": j})
         saved = sorted(p for p in (edited_dir.glob("*") if edited_dir.is_dir() else [])
                        if p.suffix.lower() in IMAGE_SUFFIXES)
         return page(request, "photos.html", readings=rows, inbox=str(inbox_dir), note=note,
-                    weights=WEIGHTS, saved=saved)
+                    weights=weights, saved=saved, shipped=custom is None)
 
     @app.post("/photos/upload", response_class=HTMLResponse)
     async def photos_upload(request: Request, file: UploadFile = File(...)):
@@ -592,12 +682,15 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         src = inbox_file(str(form.get("name", "")))
         if src is None:
             return photos(request, note="That file is not in the inbox folder.")
-        judged = judge_photo(src, measure(src))
+        weights = rubric_weights()
+        judged = judge_photo(src, measure(src), weights)
         fixes = judged.fixes or judged.reading.fixes
         if not fixes:
             return photos(request, note="Nothing left for the editor to do - that frame is already clean.")
         dst = fix(src, inbox_dir / "clean", fixes, tilt=judged.tilt, focus=judged.focus)
-        after = judge_photo(dst, measure(dst))
+        after = judge_photo(dst, measure(dst), weights)
+        remember(dst, "photo", after)
+        log_ops(src, dst, [[f, None] for f in fixes])
         moved = (f"score {judged.score} to {after.score}" if after.score != judged.score
                  else f"score still {judged.score}")
         return photos(request, note=f"Wrote {dst.name} with {' + '.join(fixes)} - {moved}. "
@@ -615,7 +708,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                     rel=str(src.relative_to(inbox_dir)).replace("\\", "/"),
                     reading=reading, sliders=SLIDERS, presets=PRESETS,
                     presets_json=json.dumps(PRESETS), recipe_json=json.dumps(carried),
-                    judged=judge_photo(src, reading),
+                    judged=judge_photo(src, reading, rubric_weights()),
                     note=note, edited=src.parent == edited_dir)
 
     @app.get("/edit/preview")
@@ -638,7 +731,9 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         dst = next_name(edited_dir, src.stem[:60], ".png" if png else ".jpg")
         edit_file(src, recipe).save(dst, "PNG" if png else "JPEG", quality=SAVE_QUALITY)
         dst.with_suffix(".json").write_text(json.dumps(recipe, indent=1), encoding="utf-8")
-        after = judge_photo(dst, measure(dst))
+        after = judge_photo(dst, measure(dst), rubric_weights())
+        remember(dst, "photo", after)
+        log_ops(src, dst, recipe)
         return RedirectResponse(
             f"/edit?name={quote(f'edited/{dst.name}')}&note=Saved+{quote(dst.name)}+with+{len(recipe)}"
             "+edits.+Score+" + str(after.score) + ".+The+original+was+not+touched.", status_code=303)
@@ -709,6 +804,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         side = src.with_suffix(".json")
         carried = clipmod.normalize(recipe_of(side.read_text(encoding="utf-8"))) if side.is_file() else []
         verdict = judge_clip(src, frames_dir / frame_key(src))
+        remember(src, "clip", verdict)
         trim_previews(frames_dir / "preview", frame_key(src))
         tips = suggest(verdict)
         return page(request, "clip.html", file_name=src.name,

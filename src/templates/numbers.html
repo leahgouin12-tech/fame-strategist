@@ -4,6 +4,8 @@
 <h1>What actually happened</h1>
 <p class="sub">Type three numbers per post, straight off the app's own insights screen:
 <code>views, watched %, follows</code>. One post per line. No export needed.</p>
+<p class="k">Put the file name you posted as the reference at the start of the line, and this
+page can compare what it thought of the frame with what your audience did with it.</p>
 
 <div class="card">
   <form method="post" action="/numbers">
@@ -48,4 +50,104 @@
 {% elif note %}
 <p class="sub">Nothing to read yet.</p>
 {% endif %}
+
+<h2>Does this app&rsquo;s taste match your audience?</h2>
+<div class="card">
+  <p class="k">{{ report.note }}</p>
+  {% if not report.measured %}
+  <p class="limit"><strong>What this needs:</strong> a score this app measured from the file
+    itself, and the numbers your audience left, on the same post. Photos and Clips write a score
+    the moment they read a file; the reference you type here has to be that file&rsquo;s name,
+    because that is the only link between a frame and its numbers and this page will not guess
+    it for you.</p>
+  {% else %}
+  <table class="tbl">
+    <tr><th>your score against</th><th>rank</th><th>what that means</th></tr>
+    {% for l in report.links %}
+    <tr>
+      <td>{{ l.label }}</td>
+      <td>{{ l.rho if l.rho is not none else "&mdash;" }}</td>
+      <td>{{ l.words }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <table class="tbl">
+    <tr><th>half of your posts</th><th>count</th><th>median score</th><th>reach</th>
+      <th>watched</th><th>follows per 1000</th></tr>
+    {% for h in report.halves %}
+    <tr>
+      <td>{{ h.label }}</td>
+      <td>{{ h.count }}</td>
+      <td>{{ h.median_score }}</td>
+      <td>{{ h["views"] }}</td>
+      <td>{{ h["avg_watch_pct"] }}</td>
+      <td>{{ h["follow_rate_per_1000"] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  {% if report.inversion %}
+  <p class="row"><span class="chip contested">the finding</span></p>
+  <p class="claim">{{ report.inversion }}</p>
+  {% endif %}
+  {% if report.overrides %}<p class="k">{{ report.overrides }}</p>{% endif %}
+
+  <h3>The rubric</h3>
+  <p class="k">Scoring your frames right now:
+    {% for name, w in weights.items() %}{{ name }} {{ '%.0f'|format(w * 100) }}%{% if not loop.last %} &middot; {% endif %}{% endfor %}
+    {% if custom %}&mdash; accepted from your own numbers{% else %}&mdash; the opinion this app shipped with{% endif %}.</p>
+  {% if report.suggestions %}
+  <p class="limit">{{ report.weight_note }}</p>
+  <ul>
+    {% for s in report.suggestions %}
+    <li><strong>{{ s.component }}</strong> {{ s.current|round(2) }} to {{ s.proposed|round(2) }}
+      &mdash; {{ s.why }}</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/numbers/reweight">
+    <button type="submit">Accept these weights</button>
+    <span class="k">A proposal, not a change. Nothing moves until you press it, and it is
+      reversible below. The clip rubric is separate and this button does not touch it.</span>
+  </form>
+  {% else %}
+  <p class="limit">{{ report.weight_note }}</p>
+  {% endif %}
+  {% if custom %}
+  <form method="post" action="/numbers/reset">
+    <button type="submit" class="ghost">Reset to the shipped weights</button>
+  </form>
+  {% endif %}
+  {% endif %}
+  <p class="limit"><strong>What this card never does:</strong> it does not change the rubric on
+    its own, does not claim a cause your export could not support, and does not take over the
+    format comparison above - which hypothesis converts is the reading&rsquo;s job, and the two
+    are kept apart on purpose.</p>
+</div>
+
+<h2>What each post costs</h2>
+<div class="card">
+  <table class="tbl">
+    <tr><th>currency</th><th>total</th><th>per post</th><th>what the number actually is</th></tr>
+    {% for c in cost.currencies %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td>{{ c.total }}</td>
+      <td>{{ c.per_post }}</td>
+      <td class="k">{{ c.basis }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k">{{ cost.local }}</p>
+  <p class="claim">{{ cost.note }}</p>
+  <form method="post" action="/numbers/credits">
+    <label>Credits you spent on this account&rsquo;s work</label>
+    <input type="text" name="credits" value="{{ credits }}" placeholder="blank keeps the cell empty">
+    <input type="text" name="what_for" value="{{ credits_note }}" maxlength="200"
+           placeholder="what they bought, if you want it on the record">
+    <button type="submit">Record it</button>
+    <span class="k">Your statement, not a measurement: nothing here can read a Qoder balance,
+      so the honest alternative to typing a number is leaving it empty.</span>
+  </form>
+</div>
 {% endblock %}

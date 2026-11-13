@@ -17,9 +17,11 @@ def row(ref, watch, follows, views=1000, hypothesis=None):
                      4, 1, hypothesis=hypothesis or PLAN.chosen)
 
 
-def agenda(rows=(), days=(), landed=(), weak=()):
+def agenda(rows=(), days=(), landed=(), weak=(), offline=True, spend=None):
     return build_agenda(plan=PLAN, days=list(days), rows=list(rows), landed=list(landed),
-                        weak=list(weak), entries=ENTRIES, today=TODAY)
+                        weak=list(weak), entries=ENTRIES, today=TODAY,
+                        engine_name="offline" if offline else "gemini", offline=offline,
+                        spend=spend)
 
 
 def test_the_window_is_a_fortnight_not_a_week():
@@ -112,9 +114,22 @@ def test_research_lists_only_the_claims_behind_this_week_and_dates_them():
 
 def test_the_spend_line_is_zero_because_nothing_was_called():
     s = agenda(rows=[row("p", 20.0, 5)], landed=["a.png"]).spend
-    assert s.credits.startswith("0 model credits")
+    assert s.credits.startswith("0 model calls on record")
     assert s.local == "1 frame scored and 1 post read, all local CPU."
     assert "credits, not quota" in s.next_time
+
+
+def test_the_coach_reports_the_calls_this_app_counted_not_a_round_zero():
+    s = agenda(rows=[row("p", 20.0, 5)], landed=["a.png"], offline=False,
+               spend={"model_calls": 3, "credits": None}).spend
+    assert "3 model calls on record" in s.credits
+    assert "nothing here can read that balance" in s.credits
+
+
+def test_a_key_without_a_call_is_still_reported_as_zero_calls():
+    s = agenda(rows=[row("p", 20.0, 5)], landed=["a.png"], offline=False,
+               spend={"model_calls": 0}).spend
+    assert s.credits.startswith("0 model calls on record with the engine at gemini")
 
 
 def test_there_is_always_something_to_propose_and_never_a_claim_to_have_acting():

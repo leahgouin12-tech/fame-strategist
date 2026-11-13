@@ -28,8 +28,9 @@ generate pixels that were never there &mdash; and a high score is not a promise 
   {% set n = readings | selectattr('r.verdict', 'equalto', v) | list | length %}
   {% if n %}<span class="chip {{ v }}">{{ v }} {{ n }}</span>{% endif %}
   {% endfor %}
-  <span class="chip">weights: placement 30 &middot; level 20 &middot; breathing 20 &middot; palette 15
-    &middot; focus 15 &mdash; this app's opinion, not a platform's</span>
+  <span class="chip">weights:
+    {% for name, w in weights.items() %}{{ name }} {{ '%.0f'|format(w * 100) }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+    &mdash; {% if shipped %}this app's opinion, not a platform's{% else %}weights you accepted from your own numbers, on the Numbers page{% endif %}</span>
 </div>
 
 {% for row in readings %}

@@ -238,11 +238,19 @@ def _n(count: int, word: str) -> str:
     return f"{count} {word}" if count == 1 else f"{count} {word}s"
 
 
-def _spend(rows, landed, engine_name: str, offline: bool) -> Spend:
-    credits = ("0 model credits, 0 API calls. This page was computed from files and rows "
-               "already on this machine."
-               if offline else
-               f"Engine: {engine_name}. The coach itself made no call; only hook lines would.")
+def _spend(rows, landed, engine_name: str, offline: bool, spend: dict | None = None) -> Spend:
+    calls = int((spend or {}).get("model_calls") or 0)
+    if calls:
+        credits = (f"{_n(calls, 'model call')} on record for this app, every one a hook line "
+                   "the writer asked a model for. The coach made none of them, and credits stay "
+                   "whatever you state on the Numbers page - nothing here can read that balance.")
+    elif offline:
+        credits = ("0 model calls on record, because the engine is offline and a call has not "
+                   "been possible. No credits stated by you either: this page was computed "
+                   "from files and rows already on this machine.")
+    else:
+        credits = (f"0 model calls on record with the engine at {engine_name}: the writer has "
+                   "not needed one yet, and the coach never calls.")
     return Spend(credits,
                  f"{_n(len(landed), 'frame')} scored and {_n(len(rows), 'post')} read, "
                  "all local CPU.",
@@ -261,7 +269,7 @@ def _week_at(plan, day: date):
 
 
 def build_agenda(*, plan, days, rows, landed, weak, entries, today=None,
-                 engine_name="offline", offline=True) -> Agenda:
+                 engine_name="offline", offline=True, spend=None) -> Agenda:
     today = today or date.today()
     start, end = today - timedelta(days=CADENCE_DAYS - 1), today
     window = [d for d in days if start.isoformat() <= d["date"] <= end.isoformat()]
@@ -277,7 +285,8 @@ def build_agenda(*, plan, days, rows, landed, weak, entries, today=None,
     moves = _moves(plan, rows, next_week)
     agenda = Agenda(start.isoformat(), end.isoformat(), CADENCE_DAYS, coverage, performance,
                     _self_check(plan, rows), moves, next_week,
-                    _research(entries, week, today), _spend(rows, landed, engine_name, offline), [])
+                    _research(entries, week, today),
+                    _spend(rows, landed, engine_name, offline, spend), [])
     agenda.proposals = _proposals(agenda)
     return agenda
 

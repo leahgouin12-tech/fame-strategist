@@ -1651,7 +1651,8 @@ git commit -m "test: grep-enforced ToS guardrails and real-source check"
 **Not covered by Phase 1, intentionally deferred to later plans:**
 - §5.2 preflight, §5.3 judge, §5.5 edit ladder, §5.6 writer, §5.7 scheduler, §5.8 publish handoff — the folder/media pipeline. This is the reordering the user asked for.
 - §5.11's *scheduled* trigger and §5.12's follower-export diff.
-- §5.9's rubric reweighting, which needs the judge to exist first.
+- §5.9's rubric reweighting, which needs the judge to exist first (built later in the sequence —
+  see the ledger at the end of this file).
 - §5.13's comment-reply drafting, which needs platform API access Phase 1 does not have.
 
 **2. Placeholder scan.** No TBD or TODO steps remain. Three places name a deliberate stub and its upgrade path rather than leaving a hole: the offline engine (Tasks 3, 7, 9 all announce it in UI), the `[needs engine]` hook and caption, and the unstyled Phase 1 UI against the "must not look cheap" requirement, which is assigned to `day.html`/`plan.html` in Task 9 Step 3.
@@ -1778,4 +1779,29 @@ named then rather than left as a placeholder now.
   `clip-0042` donated its digits as the view count, so numbers now come only from the tokens
   after the reference.
 
-**Not built:** §5.9's two-currency spend tracker beyond the coach's cost card.
+- `src/metrics/correlate.py` + `src/metrics/spend.py` (spec §5.9): the loop had to be written down
+  before it could close, because it needs a score that survives the day it was made. Three new
+  one-purpose tables — `scores`, `rubric`, `spend` — and `edit_chain`, which the schema had
+  promised and nothing had ever written, finally gets rows: `log_ops()` records one operation per
+  saved file with the digest before and after, so "is this an AI image" is answered with a log.
+  `remember()` stores every judgement the Photos and Clips pages show, keyed on the file name she
+  will later type as the post reference, because that name is the only key a frame and its
+  numbers actually share — a mismatch is counted and named, never guessed around. `report()` then
+  holds the same floor as the reading (8 paired posts) and, above it, gives a rank correlation
+  against reach, watched and follows per 1000 plus the one question a small number deserves:
+  `chance()` reshuffles her own outcome column 2000 times from a fixed seed and reports how often
+  plain noise lands on a link that size. The inversion is the point of the page — when the half
+  the rubric preferred converted worse, it says so, in those words, and names where the rubric
+  puts most of its belief. `reweight()` proposes and applies nothing: a component with no signal
+  keeps the weight it had, a proposal waits for 12 paired posts rather than 8 because a weight
+  moves every future score, and the accept button recomputes from her rows instead of trusting a
+  form. `spend.tally()` keeps the two currencies apart instead of adding them: model calls counted
+  by this app only where a call actually produced text, and agent credits as her own statement,
+  with the cell left empty rather than filled with an invented zero — nothing here can read a
+  Qoder balance, and the coach's cost card now quotes the same counted number.
+
+**Not built:** nothing left in the Phase 1 feature list. What still does not exist is outside an
+app that runs on her machine with no server and no schedule of its own: the coach still needs her
+to open `/weekly` (§5.11's trigger), a trend run still needs the agent to paste the brief and
+open the sources (§5.10's automation), and Tier B/C of the edit ladder stays unwired — which
+`test_the_edit_ladder_is_not_reachable_from_phase_one` enforces rather than remembers.
