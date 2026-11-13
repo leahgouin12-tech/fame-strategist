@@ -32,6 +32,69 @@
 </div>
 
 <div class="card">
+  <h2 style="margin-top:0">Ready to post</h2>
+  {% if note %}<p class="k"><strong>{{ note }}</strong></p>{% endif %}
+  <p class="k">One block. Copy it, paste it into the app on your phone, then pick the file it goes with.</p>
+  <textarea id="postcopy" rows="4" spellcheck="false">{{ today.caption }}
+
+{{ today.hashtags|join(' ') }}</textarea>
+  <p><button type="button" class="btn ghost" id="copybtn">Copy the block</button>
+    <span class="k" id="copynote">Nothing copied yet.</span></p>
+
+  <form method="post" action="/today/attach">
+    <input type="hidden" name="on" value="{{ day_iso }}">
+    <label class="k" for="postfile">The file this day went out with</label><br>
+    <select name="file" id="postfile">
+      <option value="">nothing attached yet</option>
+      {% for m in postables %}
+      <option value="{{ m.rel }}"
+        {{ "selected" if attached and attached.file == m.rel }}>{{ m.kind }} &middot; {{ m.rel }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">{{ "Re-tie it" if attached else "Tie it to this day" }}</button>
+  </form>
+
+  {% if attached %}
+  <p class="k">Posting <strong>{{ attached.file }}</strong> &mdash;
+    a {{ attached.kind }} &mdash; on {{ day_iso }}.</p>
+  {% if attached.kind == "photo" %}
+  <img src="/inbox/{{ attached.file | urlencode }}" alt="{{ attached.file }}"
+       style="max-width:170px;border-radius:10px;display:block;margin-top:8px">
+  {% endif %}
+  {% elif postables %}
+  <p class="k">Nothing tied to this day yet. The list is what is in your folders right now.</p>
+  {% else %}
+  <p class="k">No files to pick from yet &mdash; the photo and clip folders are both empty.
+    Save an edit or a cut and it appears here.</p>
+  {% endif %}
+  <p class="k">No suggested slot off a vendor chart: the two biggest published charts name
+    opposite days for the same platform
+    (<a href="/sources?tier=contested"><span class="chip">myth-best-time-to-post-chart</span></a>).
+    Pick one window you can hold for three weeks, and post inside it.</p>
+  <p class="k">Alt text is the one line this app will not write for you. It measures light,
+    shape and steadiness &mdash; not what is in the frame &mdash; so only you can say what to
+    describe.</p>
+  <p class="k">This app does not post for you. No scheduled uploads, no signing in as you,
+    nothing leaves this machine.</p>
+  <script>
+    const box = document.getElementById("postcopy");
+    document.getElementById("copybtn").addEventListener("click", async () => {
+      const noteEl = document.getElementById("copynote");
+      box.focus();
+      box.select();
+      try {
+        await navigator.clipboard.writeText(box.value);
+      } catch (e) {
+        document.execCommand("copy");
+      }
+      // The block is left selected on purpose: if the browser refused the silent copy,
+      // Ctrl+C still works, and the note never claims more than it knows.
+      noteEl.textContent = "Copied. If nothing landed, the block is selected - press Ctrl+C.";
+    });
+  </script>
+</div>
+
+<div class="card">
   <h3>Why this day looks like this</h3>
   <p class="k">Built from
     {% for e in today.sourced_from %}<a href="/sources"><span class="chip">{{ e }}</span></a> {% endfor %}

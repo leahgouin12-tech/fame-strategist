@@ -1683,6 +1683,16 @@ editor, then video):
 - `src/media/clip.py` + `src/media/clipjudge.py` — the video engine on the ffmpeg bundled by
   `imageio-ffmpeg`, and the five-frame clip judge that reuses the photo judge on each frame.
 - `templates/clips.html`, `templates/clip.html` — the clip list and the clip editor.
+- The publish handoff (spec §5.8), on `today.html` + `POST /today/attach`: one block holding the
+  caption and the tags, a picker over the files actually in `data/inbox` and `data/clips`, and the
+  choice stored in that day's row so the numbers can later be read against the format that produced
+  it. One bug came with it: `today_done` used to write `{"posted": True}` as the whole payload,
+  which silently untied the file the moment she marked the day posted — `save_day` replaces the row,
+  so anything writing one piece of a day now reads the rest back first through `day_payload()`.
+  What §5.8 also asked for is refused rather than faked: no suggested posting slot (the playbook's
+  own contested entry shows the two biggest published charts naming opposite days), and no alt text
+  written on her behalf, because the photo judge measures light, shape and steadiness and has no
+  way to know what is in the frame.
 - `requirements.txt`: `imageio-ffmpeg` added. It is the only new dependency, it costs nothing, and
   it keeps the machine needing no configuration — which is the whole premise.
 

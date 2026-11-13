@@ -45,6 +45,14 @@ def load_playbook():
     return entries, pending
 
 
+def iso_or_today(raw) -> str:
+    """A date is how she asks for another day, not a way to make the page fall over."""
+    try:
+        return date.fromisoformat(str(raw)).isoformat()
+    except (TypeError, ValueError):
+        return date.today().isoformat()
+
+
 def parse_answers(form) -> InterviewAnswers:
     def flag(name):
         return form.get(name) in ("on", "true", "1")
@@ -192,21 +200,79 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             return niches(request)
         return page(request, "plan.html", plan=plan, entries=load_playbook()[0])
 
+    def day_payload(iso: str) -> dict:
+        """A day is one JSON payload and save_day replaces it whole, so anything writing
+        one piece of it reads the rest back first - or the pieces erase each other."""
+        logged = db.get_days(iso, iso)
+        return {k: v for k, v in (logged[0] if logged else {}).items()
+                if k not in ("date", "done")}
+
+    def postable_media() -> list[dict]:
+        """What she could actually be posting today, straight out of the two folders the
+        app writes to. Relative to their own root, which is what the guards resolve."""
+        out = []
+        for rel_root, folder, kind, suffixes in [
+            ("", inbox_dir, "photo", IMAGE_SUFFIXES),
+            ("edited/", edited_dir, "photo", IMAGE_SUFFIXES),
+            ("", clips_dir, "clip", clipmod.VIDEO_SUFFIXES),
+            ("edited/", clips_edited, "clip", clipmod.VIDEO_SUFFIXES),
+        ]:
+            if not folder.is_dir():
+                continue
+            for p in sorted(folder.iterdir()):
+                if p.is_file() and p.suffix.lower() in suffixes:
+                    out.append({"rel": rel_root + p.name, "kind": kind})
+        return out
+
     @app.get("/today", response_class=HTMLResponse)
-    def today(request: Request, on: str | None = None):
+    def today(request: Request, on: str | None = None, note: str = ""):
         answers, plan = db.get_interview(), plan_or_none()
         if not answers or not plan:
             return home(request)
-        day = date.fromisoformat(on) if on else date.today()
+        day = date.fromisoformat(iso_or_today(on))
         entries, _pending = load_playbook()
         d = build_day(plan, entries, answers, day, engine)
         logged = db.get_days(day.isoformat(), day.isoformat())
         return page(request, "today.html", today=d, plan=plan, answers=answers,
-                    posted=bool(logged and logged[0]["done"]), day_iso=day.isoformat())
+                    posted=bool(logged and logged[0]["done"]), day_iso=day.isoformat(),
+                    attached=(logged[0].get("attach") if logged else None),
+                    postables=postable_media(), note=note)
+
+    @app.post("/today/attach", response_class=HTMLResponse)
+    def today_attach(request: Request, on: str = Form(""), file: str = Form("")):
+        on = iso_or_today(on)
+        wanted = file.strip()
+        payload = day_payload(on)
+        if not wanted:
+            payload.pop("attach", None)
+            db.save_day(on, payload)
+            return today(request, on=on)
+        found = None
+        for root, finder, as_kind, suffixes in (
+                (inbox_dir, inbox_file, "photo", IMAGE_SUFFIXES),
+                (clips_dir, clip_file, "clip", clipmod.VIDEO_SUFFIXES)):
+            hit = finder(wanted)
+            if hit is not None and hit.suffix.lower() in suffixes:
+                found = (hit, as_kind, root)
+                break
+        if found is None:
+            return today(request, on=on,
+                         note=f"{wanted} is not in your folders - pick from the list, or drop "
+                              "the file into an inbox or clips folder first.")
+        src, kind, root = found
+        # The resolved path, not what was typed: this string comes back out of the row and
+        # into an <img src>, so it is normalised once here rather than trusted twice later.
+        rel = str(src.relative_to(root)).replace("\\", "/")
+        payload["attach"] = {"file": rel, "kind": kind}
+        db.save_day(on, payload)
+        return today(request, on=on, note=f"{rel} is now tied to this day.")
 
     @app.post("/today/done", response_class=HTMLResponse)
-    def today_done(request: Request, on: str = Form(...)):
-        db.save_day(on, {"posted": True})
+    def today_done(request: Request, on: str = Form("")):
+        on = iso_or_today(on)
+        payload = day_payload(on)
+        payload["posted"] = True
+        db.save_day(on, payload)
         db.mark_done(on)
         return today(request, on=on)
 

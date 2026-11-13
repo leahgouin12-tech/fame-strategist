@@ -1,5 +1,6 @@
 from datetime import date
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -153,6 +154,111 @@ def test_the_app_binds_nothing_public(client):
     paths = {getattr(r, "path", "") for r in client.app.routes}
     assert not any(p.startswith("/media") or "public" in p for p in paths)
     assert not any("follow" in p for p in paths)
+
+
+def test_the_day_gives_one_block_to_copy_not_a_page_to_reread(planned):
+    body = planned.get("/today", params={"on": "2026-11-20"}).text
+    assert body.count("<textarea") == 1, "two blocks means two things to copy"
+    block = re.search(r"<textarea[^>]*>(.*?)</textarea>", body, re.S).group(1)
+    caption = re.search(r'<p class="claim">(.*?)</p>', body, re.S).group(1)
+    tags = re.findall(r'<span class="chip">(#[^<]+)</span>', body)
+    assert tags and all(t in block for t in tags)
+    assert caption in block and "\n\n" in block.strip()
+
+
+def test_the_picker_only_lists_files_she_actually_has(planned, tmp_path):
+    _seed_media(tmp_path)
+    body = planned.get("/today", params={"on": "2026-11-20"}).text
+    options = re.findall(r'<option value="([^"]*)"', body)
+    assert "look.png" in options and "edited/crop.jpg" in options
+    assert "take.mp4" in options and "edited/cut.mp4" in options
+    assert "notes.txt" not in options and "" in options, "an empty choice must exist"
+
+
+def test_a_saved_cut_stays_tied_to_the_day_it_was_posted_for(planned, tmp_path):
+    _seed_media(tmp_path)
+    day = "2026-11-20"
+    body = planned.post("/today/attach", data={"on": day, "file": "edited/cut.mp4"}).text
+    assert "edited/cut.mp4" in body and "clip" in body
+    assert "edited/cut.mp4" in planned.get("/today", params={"on": day}).text
+    picker = re.search(r'<select name="file".*?</select>',
+                       planned.get("/today", params={"on": day}).text, re.S).group(0)
+    assert "selected" in picker, "the picker must reopen pointing at what that day used"
+    assert planned.app.state.db.get_days(day, day)[0]["attach"] == {
+        "file": "edited/cut.mp4", "kind": "clip"}
+
+
+def test_the_attach_guard_refuses_a_path_that_is_not_hers(planned, tmp_path):
+    _seed_media(tmp_path)
+    (tmp_path / "outside.png").write_bytes(b"x")
+    day = "2026-11-20"
+    body = planned.post("/today/attach", data={"on": day, "file": "../outside.png"}).text
+    assert "not in your folders" in body
+    assert planned.app.state.db.get_days(day, day) == [], "a refused name records nothing"
+
+
+def test_clearing_the_attachment_leaves_nothing_tied_to_the_day(planned, tmp_path):
+    _seed_media(tmp_path)
+    day = "2026-11-20"
+    planned.post("/today/attach", data={"on": day, "file": "look.png"})
+    planned.post("/today/attach", data={"on": day, "file": ""})
+    assert planned.app.state.db.get_days(day, day)[0].get("attach") is None
+    body = planned.get("/today", params={"on": day}).text
+    assert "Nothing tied to this day yet" in body
+    picker = re.search(r'<select name="file".*?</select>', body, re.S).group(0)
+    assert "selected" not in picker, "the picker must not still point at the cleared file"
+
+
+def test_marking_a_day_posted_keeps_the_file_attached_to_it(planned, tmp_path):
+    """save_day replaces the whole payload, so anything that writes one piece of a
+    day has to read the rest back first - otherwise the file silently un-ties itself."""
+    _seed_media(tmp_path)
+    day = "2026-11-20"
+    planned.post("/today/attach", data={"on": day, "file": "take.mp4"})
+    planned.post("/today/done", data={"on": day})
+    logged = planned.app.state.db.get_days(day, day)[0]
+    assert logged["done"] and logged["attach"]["file"] == "take.mp4"
+    assert logged["posted"] is True
+
+
+def test_the_app_never_claims_to_post_it_for_her(planned):
+    body = planned.get("/today", params={"on": "2026-11-20"}).text.lower()
+    assert "does not post for you" in body
+    assert "nothing leaves this machine" in body
+
+
+def test_a_date_she_could_not_have_typed_still_opens_a_day(planned):
+    page = planned.get("/today", params={"on": "not-a-date"})
+    assert page.status_code == 200
+    assert "Say this first" in page.text
+
+
+def test_the_tie_records_the_resolved_path_not_what_was_typed(planned, tmp_path):
+    _seed_media(tmp_path)
+    day = "2026-11-20"
+    planned.post("/today/attach", data={"on": day, "file": "edited/../look.png"})
+    assert planned.app.state.db.get_days(day, day)[0]["attach"] == {
+        "file": "look.png", "kind": "photo"}
+
+
+def test_the_handoff_refuses_a_magic_hour_and_a_written_alt_text(planned):
+    body = planned.get("/today", params={"on": "2026-11-20"}).text
+    assert "myth-best-time-to-post-chart" in body, "the refusal has to name its source"
+    assert "only you can say what to" in body, "alt text is refused, and the reason is given"
+
+
+def _seed_media(tmp_path):
+    from PIL import Image
+
+    inbox = tmp_path / "inbox"
+    (inbox / "edited").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "clips" / "edited").mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (900, 1200), (200, 30, 90)).save(inbox / "look.png")
+    Image.new("RGB", (720, 1280), (30, 90, 200)).save(inbox / "edited" / "crop.jpg")
+    (inbox / "notes.txt").write_text("not media", encoding="utf-8")
+    (tmp_path / "clips" / "take.mp4").write_bytes(b"a clip she named")
+    (tmp_path / "clips" / "edited" / "cut.mp4").write_bytes(b"a saved cut")
+    return inbox
 
 
 def _inbox_client(tmp_path):
