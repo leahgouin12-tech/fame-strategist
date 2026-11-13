@@ -611,11 +611,15 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         return page(request, "plan.html", plan=changed, entries=load_playbook()[0])
 
     edited_dir = inbox_dir / "edited"
+    clean_dir = inbox_dir / "clean"
 
     def inbox_file(name: str) -> Path | None:
-        """Only her inbox folder or her saved edits - never a path somebody typed."""
+        """Only her inbox folder and the two folders this app writes results into -
+        never a path somebody typed. The one-tap fix lands in clean/, so the editor has
+        to be able to open it again or that copy is written and then lost."""
         target = (inbox_dir / name).resolve()
-        if target.parent not in (inbox_dir.resolve(), edited_dir.resolve()) or not target.is_file():
+        allowed = (inbox_dir.resolve(), edited_dir.resolve(), clean_dir.resolve())
+        if target.parent not in allowed or not target.is_file():
             return None
         return target
 
@@ -659,8 +663,10 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             if j is not None:
                 remember(inbox_dir / r.name, "photo", j)
             rows.append({"r": r, "j": j})
-        saved = sorted(p for p in (edited_dir.glob("*") if edited_dir.is_dir() else [])
-                       if p.suffix.lower() in IMAGE_SUFFIXES)
+        produced = [p for folder in (edited_dir, clean_dir) if folder.is_dir()
+                    for p in folder.glob("*") if p.suffix.lower() in IMAGE_SUFFIXES]
+        saved = [{"name": p.name, "href": quote(p.relative_to(inbox_dir).as_posix())}
+                 for p in sorted(produced, key=lambda p: p.name)]
         return page(request, "photos.html", readings=rows, inbox=str(inbox_dir), note=note,
                     weights=weights, saved=saved, shipped=custom is None)
 
@@ -687,7 +693,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         fixes = judged.fixes or judged.reading.fixes
         if not fixes:
             return photos(request, note="Nothing left for the editor to do - that frame is already clean.")
-        dst = fix(src, inbox_dir / "clean", fixes, tilt=judged.tilt, focus=judged.focus)
+        dst = fix(src, clean_dir, fixes, tilt=judged.tilt, focus=judged.focus)
         after = judge_photo(dst, measure(dst), weights)
         remember(dst, "photo", after)
         log_ops(src, dst, [[f, None] for f in fixes])

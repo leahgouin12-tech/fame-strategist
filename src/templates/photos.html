@@ -99,10 +99,11 @@ generate pixels that were never there &mdash; and a high score is not a promise 
 {% if saved %}
 <div class="card">
   <p class="k"><strong>Saved edits</strong> &mdash; each one opens again with its sliders intact,
-    because the edit list is stored beside it and re-run on the original.</p>
+    because the edit list is stored beside it and re-run on the original. The one-tap fixes land
+    here too, so you can keep editing a frame the app already corrected.</p>
   <div class="saved">
     {% for p in saved %}
-    <a class="chip" href="/edit?name=edited/{{ p.name | urlencode }}">{{ p.name }}</a>
+    <a class="chip" href="/edit?name={{ p.href }}">{{ p.name }}</a>
     {% endfor %}
   </div>
 </div>

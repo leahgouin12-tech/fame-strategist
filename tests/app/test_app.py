@@ -310,6 +310,20 @@ def test_the_fix_button_writes_a_copy_and_reports_both_scores(tmp_path):
     assert (tmp_path / "inbox" / "tilt.png").is_file(), "the original stays put"
 
 
+def test_a_one_tap_fix_can_be_picked_up_and_edited_again(tmp_path):
+    """The clean copy used to land in a folder nothing listed: one click, then it was
+    invisible and the editor refused to open it, so the fix was a dead end."""
+    client = _tilted_inbox(tmp_path)
+    client.post("/photos/clean", data={"name": "tilt.png"})
+    body = client.get("/photos").text
+    assert "/edit?name=clean/tilt-clean.jpg" in body, "the strip must link the folder it wrote"
+    page = client.get("/edit", params={"name": "clean/tilt-clean.jpg"})
+    assert page.status_code == 200 and "tilt-clean.jpg" in page.text
+    assert client.get("/edit/preview",
+                      params={"name": "clean/tilt-clean.jpg", "ops": '[["exposure",0.2]]'}
+                      ).status_code == 200
+
+
 def test_photos_tells_her_where_to_drop_files_when_it_is_empty(client, tmp_path):
     body = client.get("/photos").text
     assert str(tmp_path / "inbox") in body
