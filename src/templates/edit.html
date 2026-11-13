@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ file_name }} &middot; Fame Strategist{% endblock %}
+{% block body %}
+<div class="edithead">
+  <div>
+    <p class="claim"><strong>{{ file_name }}</strong>
+      <span class="k">{{ reading.width }}&times;{{ reading.height }} &middot; {{ reading.target }}
+        &middot; light {{ reading.exposure }}</span></p>
+    {% if judged %}
+    {% set worst = judged.components | sort(attribute='score') %}
+    <p class="k">score <span class="big">{{ judged.score }}</span> / 10 &middot; {{ judged.band }}
+      {% for c in worst[0:3] %}
+      &middot; {{ c.name }} {{ (c.score * 10) | round(1) }}{% endfor %}</p>
+    {% endif %}
+  </div>
+  <a class="btn ghost" href="/photos">Back to the inbox</a>
+</div>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+
+<div class="editor">
+  <div class="stagewrap">
+    <div class="stage" id="stage">
+      <img id="shot" src="/edit/preview?name={{ rel | urlencode }}&ops=%5B%5D" alt="{{ file_name }}">
+      <div id="dots"></div>
+    </div>
+    <div class="row">
+      <button type="button" class="btn ghost" id="compare">Hold to see the original</button>
+      <button type="button" class="btn ghost" id="reset">Reset everything</button>
+      <span class="k" id="status">Nothing applied yet.</span>
+    </div>
+    <p class="k">Tap the picture while <em>heal</em> or <em>focus</em> is chosen below.
+      The preview is a smaller copy so it stays fast; the save runs at full size.</p>
+  </div>
+
+  <div class="controls">
+    <div class="row chipset">
+      <button type="button" class="chip on" data-mode="adjust">adjust</button>
+      <button type="button" class="chip" data-mode="heal">heal &mdash; tap to remove</button>
+      <button type="button" class="chip" data-mode="focus">focus &mdash; tap the point</button>
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Look</strong> &mdash; a starting point; every control under it still moves</p>
+      <div class="row chipset">
+        {% for name, recipe in presets.items() %}
+        <button type="button" class="chip" data-preset="{{ name }}">{{ name }}</button>
+        {% endfor %}
+        <button type="button" class="chip" data-preset="">clear look</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Frame</strong></p>
+      <div class="row chipset" id="ratios">
+        <button type="button" class="chip on" data-ratio="">original</button>
+        {% for label, ratio in [('9:16', 0.5625), ('4:5', 0.8), ('1:1', 1.0), ('16:9', 1.7778), ('3:4', 0.75)] %}
+        <button type="button" class="chip" data-ratio="{{ ratio }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+      {% for op in sliders if op.group == 'frame' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}" step="{{ op.step }}" value="0">
+        <output>0{{ op.unit }}</output></label>
+      {% endfor %}
+      <label class="ctl"><span>mirror</span>
+        <input type="checkbox" id="flip"> <output>off</output></label>
+      <label class="ctl" data-only="heal"><span>heal size</span>
+        <input type="range" id="brush" min="0.01" max="0.12" step="0.005" value="0.03">
+        <output id="brushout">0.03</output></label>
+      <p class="k">Heal borrows the texture around a spot &mdash; a stray hair, a bin, a
+        reflection. It is capped at {{ '%.2f' | format(0.12) }} of the short edge, so it cannot
+        repaint a person, and it does not fill a region the way a generative tool would.</p>
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Tone</strong></p>
+      {% for op in sliders if op.group == 'tone' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}" step="{{ op.step }}" value="0">
+        <output>0{{ op.unit }}</output></label>
+      {% if op.note %}<p class="k tiny">{{ op.note }}</p>{% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Lens</strong> &mdash; soften everything except the point you tapped</p>
+      {% for op in sliders if op.group == 'lens' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}" step="{{ op.step }}" value="0">
+        <output>0{{ op.unit }}</output></label>
+      {% endfor %}
+      <label class="ctl"><span>feather</span>
+        <input type="range" id="feather" min="0.05" max="1" step="0.05" value="0.45">
+        <output id="featherout">0.45</output></label>
+    </div>
+
+    <form method="post" action="/edit/save" class="card saveform">
+      <input type="hidden" name="name" value="{{ rel }}">
+      <input type="hidden" name="recipe" id="recipe" value="[]">
+      <div class="row">
+        <button type="submit" class="btn">Save a copy</button>
+        <label class="k">as
+          <select name="format" id="format">
+            <option value="jpg">jpg &mdash; smaller, good for posting</option>
+            <option value="png">png &mdash; no extra compression</option>
+          </select>
+        </label>
+      </div>
+      <p class="k">The edit list is saved beside the copy, so opening it again brings your
+        sliders back and re-runs them on the full-size original instead of on a compressed result.</p>
+    </form>
+
+    <div class="need"><strong>What this will not do.</strong> No face slimming, no body
+      reshaping, no skin smoothing, no generated pixels. Those change how a person looks, and
+      this app was built to the rule that it does not offer that. Everything above moves or
+      brightens what your camera already recorded, or borrows texture a few pixels away.</div>
+  </div>
+</div>
+
+<script>
+const NAME = "{{ rel | urlencode }}";
+const PRESETS = {{ presets_json | safe }};
+const tone = {};
+let rotate = 0, crop = null, flip = 0, spots = [], lens = { v: 0, x: 0.5, y: 0.5, f: 0.45 };
+let mode = "adjust";
+const shot = document.getElementById("shot"), status = document.getElementById("status");
+
+function recipe() {
+  const r = [];
+  if (rotate) r.push(["rotate", rotate]);
+  if (flip) r.push(["flip", 1]);
+  if (crop) r.push(["crop", ...crop]);
+  for (const k in tone) if (tone[k]) r.push([k, tone[k]]);
+  if (lens.v) r.push(["lens_blur", lens.v, lens.x, lens.y, lens.f]);
+  if (spots.length) r.push(["heal", ...spots.flatMap(s => [s.x, s.y, s.r])]);
+  return r;
+}
+
+let timer = null;
+function refresh(word) {
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    const r = recipe();
+    document.getElementById("recipe").value = JSON.stringify(r);
+    shot.src = `/edit/preview?name=${NAME}&ops=${encodeURIComponent(JSON.stringify(r))}&t=${Date.now()}`;
+    status.textContent = r.length ? `${r.length} control group${r.length > 1 ? "s" : ""} applied.`
+                                  : "Nothing applied yet.";
+    if (word) status.textContent = word;
+  }, 180);
+}
+
+document.querySelectorAll("input[data-op]").forEach(el => {
+  el.addEventListener("input", () => {
+    const v = parseFloat(el.value), name = el.dataset.op;
+    el.nextElementSibling.value = `${v}${document.querySelector(`[data-op="${name}"]`).dataset.unit || ""}`;
+    if (name === "rotate") rotate = v;
+    else if (name === "lens_blur") lens.v = v;
+    else tone[name] = v;
+    refresh();
+  });
+});
+document.querySelectorAll("input[data-op]").forEach(el => el.dataset.unit = el.closest(".ctl")
+  .querySelector("output").textContent.replace("0", ""));
+
+document.getElementById("flip").addEventListener("change", e => {
+  flip = e.target.checked ? 1 : 0;
+  e.target.nextElementSibling.value = flip ? "left-right" : "off";
+  refresh();
+});
+document.getElementById("brush").addEventListener("input", e => {
+  document.getElementById("brushout").value = e.target.value; });
+document.getElementById("feather").addEventListener("input", e => {
+  lens.f = parseFloat(e.target.value);
+  document.getElementById("featherout").value = e.target.value; refresh(); });
+
+document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll("[data-mode]").forEach(x => x.classList.toggle("on", x === b));
+  document.getElementById("stage").classList.toggle("picking", mode !== "adjust");
+}));
+
+document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => {
+  const preset = PRESETS[b.dataset.preset] || [];
+  for (const k in tone) delete tone[k];
+  document.querySelectorAll("input[data-op]").forEach(el => {
+    if (el.dataset.op !== "rotate" && el.dataset.op !== "lens_blur") { el.value = 0; el.nextElementSibling.value = "0"; }
+  });
+  preset.forEach(([k, v]) => {
+    tone[k] = v;
+    const el = document.querySelector(`input[data-op="${k}"]`);
+    if (el) { el.value = v; el.nextElementSibling.value = `${v}${el.dataset.unit}`; }
+  });
+  refresh(`Look: ${b.dataset.preset || "cleared"}.`);
+}));
+
+document.querySelectorAll("#ratios [data-ratio]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#ratios [data-ratio]").forEach(x => x.classList.toggle("on", x === b));
+  const ratio = parseFloat(b.dataset.ratio);
+  crop = ratio ? [ratio] : null;   // the engine fits the box, so it fits it after straightening
+  refresh();
+}));
+
+shot.addEventListener("click", ev => {
+  if (mode === "adjust") return;
+  const box = shot.getBoundingClientRect();
+  const x = (ev.clientX - box.left) / box.width, y = (ev.clientY - box.top) / box.height;
+  if (mode === "focus") { lens.x = x; lens.y = y; if (!lens.v) { lens.v = 0.5;
+      document.querySelector('input[data-op="lens_blur"]').value = 0.5; } }
+  else spots.push({ x, y, r: parseFloat(document.getElementById("brush").value) });
+  drawDots(); refresh();
+});
+
+function drawDots() {
+  const wrap = document.getElementById("dots");
+  wrap.innerHTML = "";
+  spots.forEach((s, i) => {
+    const d = document.createElement("button");
+    d.className = "dot"; d.title = "remove this heal";
+    d.style.left = `${s.x * 100}%`; d.style.top = `${s.y * 100}%`;
+    d.style.width = d.style.height = `${s.r * 200}%`;
+    d.addEventListener("click", ev => { ev.stopPropagation(); spots.splice(i, 1); drawDots(); refresh(); });
+    wrap.appendChild(d);
+  });
+  if (lens.v) {
+    const f = document.createElement("span");
+    f.className = "focus"; f.style.left = `${lens.x * 100}%`; f.style.top = `${lens.y * 100}%`;
+    wrap.appendChild(f);
+  }
+}
+
+const hold = document.getElementById("compare");
+let original = false;
+function compare(on) {
+  if (on === original) return;
+  original = on;
+  shot.src = on ? `/edit/preview?name=${NAME}&ops=%5B%5D`
+                : `/edit/preview?name=${NAME}&ops=${encodeURIComponent(JSON.stringify(recipe()))}`;
+  status.textContent = on ? "The original, unedited." : "Your edit.";
+}
+["mousedown", "touchstart"].forEach(e => hold.addEventListener(e, ev => { ev.preventDefault(); compare(true); }));
+["mouseup", "mouseleave", "touchend"].forEach(e => hold.addEventListener(e, () => compare(false)));
+
+document.getElementById("reset").addEventListener("click", () => {
+  for (const k in tone) delete tone[k];
+  rotate = 0; crop = null; flip = 0; spots = []; lens = { v: 0, x: 0.5, y: 0.5, f: 0.45 };
+  document.querySelectorAll("input[data-op]").forEach(el => { el.value = 0; el.nextElementSibling.value = "0"; });
+  document.getElementById("flip").checked = false;
+  document.getElementById("flip").nextElementSibling.value = "off";
+  document.querySelectorAll("#ratios [data-ratio]").forEach(x => x.classList.toggle("on", !x.dataset.ratio));
+  drawDots(); refresh("Reset.");
+});
+
+document.querySelector("form.saveform").addEventListener("submit", () => {
+  document.getElementById("recipe").value = JSON.stringify(recipe());
+});
+
+(() => {
+  const carried = {{ recipe_json | safe }};
+  carried.forEach(entry => {
+    const [name, ...args] = entry;
+    if (name === "rotate") { rotate = args[0]; }
+    else if (name === "flip") { flip = 1; document.getElementById("flip").checked = true;
+      document.getElementById("flip").nextElementSibling.value = "left-right"; }
+    else if (name === "crop") { crop = args;
+      document.querySelectorAll("#ratios [data-ratio]").forEach(x =>
+        x.classList.toggle("on", args.length === 1 && Math.abs(parseFloat(x.dataset.ratio) - args[0]) < 0.005)); }
+    else if (name === "heal") { for (let i = 0; i < args.length; i += 3) spots.push({ x: args[i], y: args[i + 1], r: args[i + 2] }); }
+    else if (name === "lens_blur") { lens = { v: args[0], x: args[1], y: args[2], f: args[3] || 0.45 }; }
+    else tone[name] = args[0];
+    const el = document.querySelector(`input[data-op="${name}"]`);
+    if (el) { el.value = args[0]; el.nextElementSibling.value = `${args[0]}${el.dataset.unit}`; }
+  });
+  drawDots();
+  if (carried.length) refresh("Your saved edit, re-run on this file.");
+})();
+</script>
+{% endblock %}

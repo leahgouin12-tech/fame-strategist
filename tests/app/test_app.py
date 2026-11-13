@@ -1,4 +1,5 @@
 from datetime import date
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -213,3 +214,58 @@ def test_the_clean_button_cannot_reach_outside_the_inbox(client, tmp_path):
     (tmp_path / "outside.png").write_bytes(b"x")
     body = client.post("/photos/clean", data={"name": "../outside.png"}).text
     assert "not in the inbox folder" in body
+
+
+def test_the_editor_opens_a_file_and_previews_an_edit(tmp_path):
+    client = _inbox_client(tmp_path)
+    page = client.get("/edit?name=sharp.png")
+    assert page.status_code == 200
+    assert "Hold to see the original" in page.text
+    assert "Save a copy" in page.text
+    assert "slim" in page.text.lower(), "the page must say what the editor refuses to do"
+    shot = client.get("/edit/preview", params={"name": "sharp.png",
+                                               "ops": json.dumps([["exposure", 0.6],
+                                                                  ["heal", 0.5, 0.5, 0.04]])})
+    assert shot.status_code == 200
+    assert shot.headers["content-type"] == "image/jpeg"
+
+
+def test_saving_an_edit_writes_a_copy_and_its_recipe(tmp_path):
+    client = _inbox_client(tmp_path)
+    recipe = json.dumps([["exposure", 0.4], ["rotate", 2.5], ["nonsense", 1]])
+    saved = client.post("/edit/save", data={"name": "sharp.png", "recipe": recipe, "format": "jpg"},
+                        follow_redirects=False)
+    assert saved.status_code == 303
+    out = list((tmp_path / "inbox" / "edited").glob("*.jpg"))
+    side = list((tmp_path / "inbox" / "edited").glob("*.json"))
+    assert out and side, "the copy and its edit list belong together"
+    assert [e[0] for e in json.loads(side[0].read_text(encoding="utf-8"))] == ["rotate", "exposure"]
+    assert (tmp_path / "inbox" / "sharp.png").is_file(), "the original stays put"
+    again = client.get(saved.headers["location"])
+    assert again.status_code == 200 and "2.5" in again.text, "reopening restores the sliders"
+
+
+def test_the_editor_cannot_be_pointed_at_a_file_outside_her_folders(tmp_path):
+    client = _inbox_client(tmp_path)
+    (tmp_path / "outside.png").write_bytes(b"x")
+    assert "Pick a file first" in client.get("/edit", params={"name": "../outside.png"}).text
+    assert client.get("/edit/preview", params={"name": "../outside.png"}).status_code == 404
+    assert client.get("/edit/preview", params={"name": "nope.png", "ops": "not json"}).status_code == 404
+
+
+def test_the_picker_accepts_a_picture_and_lands_in_the_editor(tmp_path):
+    from PIL import Image
+
+    client = _inbox_client(tmp_path)
+    for stale in (tmp_path / "inbox").glob("*"):
+        stale.unlink()
+    probe = tmp_path / "probe.png"
+    Image.new("RGB", (1200, 1600), (200, 30, 90)).save(probe)
+    with probe.open("rb") as fh:
+        landed = client.post("/photos/upload", files={"file": ("probe.png", fh.read(), "image/png")},
+                             follow_redirects=False)
+    assert landed.status_code == 303
+    assert (tmp_path / "inbox" / "probe.png").is_file()
+    assert client.get(landed.headers["location"]).status_code == 200
+    refused = client.post("/photos/upload", files={"file": ("notes.txt", b"hello", "text/plain")})
+    assert ".txt" in refused.text

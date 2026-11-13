@@ -2,13 +2,23 @@
 {% block title %}Photos &middot; Fame Strategist{% endblock %}
 {% block body %}
 <h1>Photos</h1>
-<p class="sub">Drop the files you are deciding on into <code>{{ inbox }}</code>. Each frame is measured
-&mdash; where the detail sits, whether the strongest line is level, how much of the palette the file
-actually uses, how quiet the edges are &mdash; then scored out of 10.</p>
+<p class="sub">Drop the files you are deciding on into <code>{{ inbox }}</code>, or pick them
+below. Each frame is measured &mdash; where the detail sits, whether the strongest line is level,
+how much of the palette the file actually uses, how quiet the edges are &mdash; then scored out of
+10 and opened in the editor.</p>
+
+<div class="card upload">
+  <form method="post" action="/photos/upload" enctype="multipart/form-data">
+    <input type="file" name="file" accept="image/*,.heic,.avif">
+    <button type="submit" class="btn">Open in the editor</button>
+  </form>
+  <span class="k">jpg, png, webp, heic, avif, tiff &mdash; read here, never uploaded anywhere.</span>
+</div>
 
 <div class="need"><strong>It scores the frame, not you.</strong> No face, skin or body is measured or
-ranked, and the editor only moves or brightens what the camera already recorded. It cannot add detail
-that was never captured, and a high score is not a promise about reach.</div>
+ranked. The editor moves, crops, brightens and softens what the camera already recorded, and borrows
+texture a few pixels away to heal a spot. It will not slim a face, reshape a body, smooth skin or
+generate pixels that were never there &mdash; and a high score is not a promise about reach.</div>
 
 {% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
 
@@ -25,7 +35,8 @@ that was never captured, and a high score is not a promise about reach.</div>
 {% for row in readings %}
 {% set r = row.r %}{% set j = row.j %}
 <div class="card shot">
-  {% if not r.error %}<img class="thumb" src="/inbox/{{ r.name | urlencode }}" alt="{{ r.name }}">{% endif %}
+  {% if not r.error %}<a class="thumb" href="/edit?name={{ r.name | urlencode }}"
+    title="Open in the editor"><img src="/inbox/{{ r.name | urlencode }}" alt="{{ r.name }}"></a>{% endif %}
   <div class="shotbody">
     <div class="row">
       {% if j %}<span class="big">{{ j.score }}</span><span class="k">/ 10 &middot; {{ j.band }}</span>{% endif %}
@@ -60,12 +71,15 @@ that was never captured, and a high score is not a promise about reach.</div>
 
     <p class="limit"><strong>Does not establish:</strong> {{ r.limit }}</p>
 
-    {% if j and j.fixes %}
-    <form method="post" action="/photos/clean">
-      <input type="hidden" name="name" value="{{ r.name }}">
-      <button type="submit">Fix it &mdash; {{ j.fixes | join(' + ') }}</button>
-    </form>
-    {% endif %}
+    <div class="row">
+      <a class="btn" href="/edit?name={{ r.name | urlencode }}">Edit</a>
+      {% if j and j.fixes %}
+      <form method="post" action="/photos/clean">
+        <input type="hidden" name="name" value="{{ r.name }}">
+        <button type="submit" class="btn ghost">One-tap fix &mdash; {{ j.fixes | join(' + ') }}</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endfor %}
@@ -73,10 +87,22 @@ that was never captured, and a high score is not a promise about reach.</div>
 {% else %}
 <div class="card">
   <p class="claim"><strong>Nothing to read yet.</strong></p>
-  <p>Drop photos or screenshots into <code>{{ inbox }}</code> and reload this page. They stay in that
-    folder; the app only opens them to measure.</p>
+  <p>Drop photos or screenshots into <code>{{ inbox }}</code> and reload this page, or use the
+    picker above. They stay in that folder; the app only opens them to measure and edit.</p>
   <p class="k">Video clips are not measured here &mdash; this machine has no decoder installed, and a
     guessed number would be worse than none.</p>
+</div>
+{% endif %}
+
+{% if saved %}
+<div class="card">
+  <p class="k"><strong>Saved edits</strong> &mdash; each one opens again with its sliders intact,
+    because the edit list is stored beside it and re-run on the original.</p>
+  <div class="saved">
+    {% for p in saved %}
+    <a class="chip" href="/edit?name=edited/{{ p.name | urlencode }}">{{ p.name }}</a>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 {% endblock %}

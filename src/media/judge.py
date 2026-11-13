@@ -15,7 +15,8 @@ from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageOps, ImageStat
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff",
+                  ".heic", ".heif", ".avif"}
 MEASURE_EDGE = 512
 MIN_BASELINE = 3
 

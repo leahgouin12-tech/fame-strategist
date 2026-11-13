@@ -1,8 +1,12 @@
 from datetime import date
 from pathlib import Path
+import io
+import json
+import shutil
+from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -13,7 +17,8 @@ from src.metrics.adapt import analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
 from src.media.clean import fix
-from src.media.judge import inbox_files, judge, measure
+from src.media.edit import PRESETS, SAVE_QUALITY, SLIDERS, edit_file, normalize
+from src.media.judge import IMAGE_SUFFIXES, inbox_files, judge, measure
 from src.playbook.store import Store
 from src.strategist.daily import build_day
 from src.strategist.interview import Interview, InterviewAnswers
@@ -269,18 +274,55 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         db.save_current_plan(changed.to_dict())
         return page(request, "plan.html", plan=changed, entries=load_playbook()[0])
 
+    edited_dir = inbox_dir / "edited"
+
     def inbox_file(name: str) -> Path | None:
+        """Only her inbox folder or her saved edits - never a path somebody typed."""
         target = (inbox_dir / name).resolve()
-        if target.parent != inbox_dir.resolve() or not target.is_file():
+        if target.parent not in (inbox_dir.resolve(), edited_dir.resolve()) or not target.is_file():
             return None
         return target
+
+    def recipe_of(raw: str) -> list:
+        try:
+            data = json.loads(raw or "[]")
+        except ValueError:
+            return []
+        return data if isinstance(data, list) else []
+
+    def next_name(directory: Path, stem: str, suffix: str) -> Path:
+        dst = directory / f"{stem}{suffix}"
+        n = 2
+        while dst.exists():
+            dst = directory / f"{stem}-{n}{suffix}"
+            n += 1
+        return dst
+
+    def preview_bytes(src: Path, recipe: list, edge: bool) -> bytes:
+        buf = io.BytesIO()
+        edit_file(src, recipe, proxy=edge).save(buf, "JPEG", quality=82 if edge else SAVE_QUALITY)
+        return buf.getvalue()
 
     @app.get("/photos", response_class=HTMLResponse)
     def photos(request: Request, note: str = ""):
         rows = [{"r": r, "j": judge_photo(inbox_dir / r.name, r) if not r.error else None}
                 for r in judge(inbox_files(inbox_dir))]
+        saved = sorted(p for p in (edited_dir.glob("*") if edited_dir.is_dir() else [])
+                       if p.suffix.lower() in IMAGE_SUFFIXES)
         return page(request, "photos.html", readings=rows, inbox=str(inbox_dir), note=note,
-                    weights=WEIGHTS)
+                    weights=WEIGHTS, saved=saved)
+
+    @app.post("/photos/upload", response_class=HTMLResponse)
+    async def photos_upload(request: Request, file: UploadFile = File(...)):
+        suffix = Path(file.filename or "").suffix.lower()
+        if suffix not in IMAGE_SUFFIXES:
+            return photos(request, note=f"{suffix or 'That file'} is not a picture this app can read.")
+        inbox_dir.mkdir(parents=True, exist_ok=True)
+        stem = Path(file.filename).name.rsplit(".", 1)[0][:60] or "photo"
+        dst = next_name(inbox_dir, stem, suffix)
+        with dst.open("wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+        return RedirectResponse(f"/edit?name={quote(dst.name)}", status_code=303)
 
     @app.post("/photos/clean", response_class=HTMLResponse)
     async def photos_clean(request: Request):
@@ -298,6 +340,46 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                  else f"score still {judged.score}")
         return photos(request, note=f"Wrote {dst.name} with {' + '.join(fixes)} - {moved}. "
                                     "The original was not touched.")
+
+    @app.get("/edit", response_class=HTMLResponse)
+    def edit_page(request: Request, name: str = "", note: str = ""):
+        src = inbox_file(name)
+        if src is None:
+            return photos(request, note="Pick a file first - the editor opens one at a time.")
+        side = src.with_suffix(".json")
+        carried = recipe_of(side.read_text(encoding="utf-8")) if side.is_file() else []
+        reading = measure(src)
+        return page(request, "edit.html", file_name=src.name,
+                    rel=str(src.relative_to(inbox_dir)).replace("\\", "/"),
+                    reading=reading, sliders=SLIDERS, presets=PRESETS,
+                    presets_json=json.dumps(PRESETS), recipe_json=json.dumps(carried),
+                    judged=judge_photo(src, reading),
+                    note=note, edited=src.parent == edited_dir)
+
+    @app.get("/edit/preview")
+    def edit_preview(name: str = "", ops: str = "", full: int = 0):
+        src = inbox_file(name)
+        if src is None:
+            raise HTTPException(status_code=404)
+        return Response(content=preview_bytes(src, recipe_of(ops), not full),
+                        media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.post("/edit/save", response_class=HTMLResponse)
+    async def edit_save(request: Request):
+        form = await request.form()
+        src = inbox_file(str(form.get("name", "")))
+        if src is None:
+            return photos(request, note="That file is not in the inbox folder.")
+        recipe = normalize(recipe_of(str(form.get("recipe", ""))))
+        png = str(form.get("format", "")) == "png"
+        edited_dir.mkdir(parents=True, exist_ok=True)
+        dst = next_name(edited_dir, src.stem[:60], ".png" if png else ".jpg")
+        edit_file(src, recipe).save(dst, "PNG" if png else "JPEG", quality=SAVE_QUALITY)
+        dst.with_suffix(".json").write_text(json.dumps(recipe, indent=1), encoding="utf-8")
+        after = judge_photo(dst, measure(dst))
+        return RedirectResponse(
+            f"/edit?name={quote(f'edited/{dst.name}')}&note=Saved+{quote(dst.name)}+with+{len(recipe)}"
+            "+edits.+Score+" + str(after.score) + ".+The+original+was+not+touched.", status_code=303)
 
     return app
 

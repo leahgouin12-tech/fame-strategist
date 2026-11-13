@@ -5,3 +5,4 @@ python-multipart
 Pillow
 httpx
 pytest
+pillow-heif
