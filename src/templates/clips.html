@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Clips &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Clips</h1>
+<p class="sub">Drop the video files you are deciding on into <code>{{ folder }}</code>, or pick one
+below. Each one is opened with the ffmpeg that came with this app &mdash; five frames pulled out
+and measured by the same judge that scores your photos, plus four things only moving pictures can
+show: whether anything happens in the first two seconds, whether the clip moves at all, whether
+the frame drifts while it is held, and whether there is anything to hear. Then it is scored out of
+10 and opened in the editor.</p>
+
+<div class="card upload">
+  <form method="post" action="/clips/upload" enctype="multipart/form-data">
+    <input type="file" name="file" accept="video/*,.mp4,.mov,.m4v,.mkv,.webm,.avi">
+    <button type="submit" class="btn">Open in the editor</button>
+  </form>
+  <span class="k">mp4, mov, m4v, mkv, webm, avi &mdash; decoded here, never uploaded anywhere.</span>
+</div>
+
+{% if not ffmpeg %}
+<div class="banner warn">The video decoder that ships with this app is not reachable on this
+  machine, so clips can be listed but not opened. Photos are unaffected. Installing
+  <code>imageio-ffmpeg</code> in the same environment the app runs from brings it back.</div>
+{% endif %}
+
+<div class="need"><strong>It judges the clip, not you &mdash; and not your face.</strong> Nothing
+here measures a person. The editor cuts, straightens, reframes, brightens and fades what the camera
+already recorded. It will not slim a face, reshape a body, smooth skin, or generate a frame that
+was never shot &mdash; ffmpeg has filters that do exactly that, and this app will not call them.</div>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+
+{% if clips %}
+<div class="row">
+  {% set bad = clips | rejectattr('ok') | list | length %}
+  <span class="chip post">readable {{ clips | length - bad }}</span>
+  {% if bad %}<span class="chip unreadable">unreadable {{ bad }}</span>{% endif %}
+  <span class="chip">weights: frames 30 &middot; hook 20 &middot; movement 15 &middot; stability 15
+    &middot; length 10 &middot; sound 10 &mdash; this app's opinion, not a platform's</span>
+</div>
+
+{% for c in clips %}
+<div class="card shot">
+  <div class="shotbody">
+    <div class="row">
+      <span class="chip {{ 'post' if c.ok else 'unreadable' }}">{{ 'readable' if c.ok else 'unreadable' }}</span>
+      <span class="k">{% if c.ok %}{{ c.line }}{% else %}{{ c.error }}{% endif %}</span>
+    </div>
+    <p class="claim"><strong>{{ c.name }}</strong></p>
+    <p class="k">The score is only calculated when a clip is opened &mdash; it needs five frames
+      decoded, and this list reads just the header so it stays fast.</p>
+
+    {% if c.flags %}
+    <ul class="assume">{% for f in c.flags %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% elif c.ok %}
+    <p class="k">No file-level flag: big enough, long enough, sound in it.</p>
+    {% endif %}
+
+    <p class="limit"><strong>Does not establish:</strong> {{ c.limit }}</p>
+
+    <div class="row">
+      <a class="btn" href="/clip?name={{ c.name | urlencode }}">Judge and edit</a>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="card">
+  <p class="claim"><strong>No clips to read yet.</strong></p>
+  <p>Drop video files into <code>{{ folder }}</code> and reload this page, or use the picker above.
+    They stay in that folder; the app only opens them to measure and to write a copy.</p>
+  <p class="k">Photos are scored and edited on their own page &mdash; the numbers there are the same
+    five measurements this page reuses on each frame.</p>
+</div>
+{% endif %}
+
+{% if saved %}
+<div class="card">
+  <p class="k"><strong>Saved cuts</strong> &mdash; each one opens again with its controls intact,
+    because the recipe is stored beside it and re-run on the original.</p>
+  <div class="saved">
+    {% for c in saved %}
+    <a class="chip" href="/clip?name=edited/{{ c.name | urlencode }}">{{ c.name }}
+      &middot; {{ '%.1f' | format(c.duration) }}s</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

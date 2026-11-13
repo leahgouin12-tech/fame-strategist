@@ -435,15 +435,34 @@ rather than guessed.
 
 ---
 
-## 10. Remaining open questions
+## 10. Open questions — defaults assumed while unanswered
 
-1. Which platforms does the account exist on now, and are any Business/Creator accounts?
-   (Decides whether §5.13 and insights ingestion work at all.)
-2. Roughly how much media gets dropped per week? (Sets whether the two-currency budget is tight
-   or comfortable.)
-3. Willing to record voice-note commentary, or photo-and-clip only? (Changes writer and video
-   pipeline substantially.)
-4. **How many Qoder credits per week can this realistically have?** Tier C and the coach both
-   draw on them and credits are already the scarce resource. If the honest answer is "very
-   few," §5.5 Tier C shrinks and §5.11 moves to fortnightly. Better decided now than rationed
-   under protest later.
+These four were left open because only the account owner can answer them. Rather than block the
+build, each got a working default. Items 1 and 2 describe choices the code already implements;
+items 3 and 4 are decisions about components **§9 has not built yet** (Tier C is Phase 6, the
+Weekly Coach is Phase 4), so they are commitments for when those phases arrive, not present
+behaviour. Changing any default is a small edit, not a rewrite.
+
+1. **Platforms.** Default: TikTok, Reels, Shorts, X — the four the intake interview offers
+   (`src/templates/interview.html`). **Business/Creator account status does not gate anything**,
+   because §5.13 was never built on account login: metrics arrive as a hand-exported CSV
+   (`src/metrics/ingest.py` needs `post_ref, views, avg_watch_pct, follows_gained`) or are typed
+   in. No platform means the app stops working; a platform with no export means typing numbers.
+2. **Weekly media volume.** Default: 10–25 drops, i.e. roughly 2–4 posts a day's worth. The
+   intake → preflight → judge path is local and free, so volume costs nothing until a clip or
+   photo is escalated to §5.5 Tier C. If real volume is much higher, the thing that gets tight is
+   the local judge's wall time, not money — see the decode caps in `src/media/clip.py`.
+3. **Voice-note commentary.** Default: **not assumed.** Nothing in the app transcribes or
+   synthesises speech. The clip editor is cut/straighten/tone/finish only (`src/media/clip.py`)
+   and the judge reads the presence of audio, not its content — an audio track with nothing in it
+   scores as silent. If she is willing to record, the cheap first win is a spoken hook drafted by
+   the writer (Phase 3) and recorded by her, not a new engine.
+4. **Weekly Qoder credits.** Default: **as close to zero as the app can run on**, per the standing
+   "very few" constraint. Two commitments for the phases that spend credits: §5.5 Tier C stays
+   small and is only reachable when she explicitly asks for a generative edit, and §5.11 Weekly
+   Coach is specced **fortnightly rather than weekly** — the §9 table says "Weekly" and that word
+   is now superseded. Nothing may spend a credit without a click that says what it will cost.
+
+**What is still genuinely unknown:** whether she has a Business/Creator account on any platform
+(would only widen what the exported CSV contains), and whether she actually wants audio in her
+posts. Both are one-question-per-item and neither blocks Phase 1.

@@ -10,3 +10,5 @@ data/inbox/
 data/*.log
 .pytest_cache/
 visualizationOutputDirectory/
+data/clips/
+data/frames/

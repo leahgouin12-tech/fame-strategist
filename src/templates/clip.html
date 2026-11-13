@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+{% block title %}Clip {{ file_name }} &middot; Fame Strategist{% endblock %}
+{% block body %}
+{% set c = verdict.clip %}
+<div class="edithead">
+  <div>
+    <p class="claim"><strong>{{ file_name }}</strong>
+      <span class="k">{{ c.line if c.ok else c.error }}</span></p>
+    {% set worst = verdict.worst %}
+    <p class="k">score <span class="big">{{ verdict.score }}</span> / 10 &middot; {{ verdict.band }}
+      {% for x in worst[0:3] %} &middot; {{ names[x.name] or x.name }}
+      {{ (x.score * 10) | round(1) }}{% endfor %}</p>
+  </div>
+  <a class="btn ghost" href="/clips">Back to the clips</a>
+</div>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+{% if not ffmpeg %}<p class="banner warn">No decoder reachable on this machine, so nothing here
+  could be read. Saving a copy needs it too.</p>{% endif %}
+{% if not c.ok %}
+<div class="card">
+  <p class="claim"><strong>This file would not open.</strong></p>
+  <p class="k">{{ c.error }}</p>
+  <p class="k">The usual fix is to export it again as an mp4 from the phone or the editor you
+    shot it in &mdash; some camera formats put their header where a fast reader cannot find it.</p>
+</div>
+{% else %}
+
+<div class="editor">
+  <div class="stagewrap">
+    <div class="stage still">
+      <img id="clipshot" src="/clip/preview?name={{ rel | urlencode }}&ops={{ initial_ops }}&t={{ times[0] if times else 0 }}"
+           alt="{{ file_name }}">
+    </div>
+    <label class="ctl scrub"><span>frame at</span>
+      <input type="range" id="scrub" min="0" max="{{ '%.2f' | format(c.duration) }}" step="0.05"
+             value="{{ times[0] if times else 0 }}">
+      <output id="scrubout">{{ '%.2f' | format(times[0] if times else 0) }}s</output></label>
+    <div class="row">
+      <button type="button" class="btn ghost" id="compare">Hold to see the same frame untouched</button>
+      <button type="button" class="btn ghost" id="reset">Reset everything</button>
+      <span class="k" id="status">Nothing applied yet.</span>
+    </div>
+
+    {% if verdict.frames %}
+    <p class="k"><strong>Five frames out of your clip</strong> &mdash; each scored by the photo
+      judge. Click one to edit that moment.</p>
+    <div class="strip">
+      {% for f in verdict.frames %}
+      <button type="button" class="frame" data-t="{{ f.at }}">
+        <img src="/frames/{{ frame_urls[loop.index0] }}" alt="frame at {{ f.at }}s">
+        <span class="k">{{ '%.1f' | format(f.at) }}s &middot; {{ f.score }}</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <p class="k">The preview is one frame at full decode, with every filter in your list applied
+      &mdash; so what you see is what the copy will hold. Speed, fades and sound only exist across
+      time, so they show as numbers, not as this picture.</p>
+  </div>
+
+  <div class="controls">
+    <div class="card">
+      <p class="k"><strong>What it measured</strong></p>
+      <table class="parts">
+        {% for x in worst %}
+        <tr>
+          <td>{{ names[x.name] or x.name }}</td>
+          <td class="bar"><div class="meter"><i style="width: {{ (x.score * 100) | round }}%"></i></div></td>
+          <td class="k">{{ x.why }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      <p class="k tiny">weights: {% for x in verdict.components %}{{ x.name }}
+        {{ (weights[x.name] * 100) | round }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+        &mdash; the frames score is the median of the five above, on the same judge as your photos.</p>
+
+      {% if verdict.ideas %}
+      <p class="k"><strong>How to fix it</strong></p>
+      <ul class="assume">{% for i in verdict.ideas %}<li>{{ i }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Cut</strong> &mdash; the part of the clip that survives</p>
+      <label class="ctl"><span>starts at</span>
+        <input type="range" id="start" min="0" max="{{ '%.2f' | format(c.duration) }}" step="0.05" value="0">
+        <output>0.00s</output></label>
+      <label class="ctl"><span>ends at</span>
+        <input type="range" id="finish" min="0" max="{{ '%.2f' | format(c.duration) }}" step="0.05"
+               value="{{ '%.2f' | format(c.duration) }}">
+        <output>{{ '%.2f' | format(c.duration) }}s</output></label>
+      {% for op in controls if op.group == 'time' and op.name == 'speed' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}"
+               step="{{ op.step }}" value="{{ op.neutral }}" data-neutral="{{ op.neutral }}"
+               data-unit="{{ op.unit }}">
+        <output>{{ op.neutral }}{{ op.unit }}</output></label>
+      <p class="k tiny">{{ op.note }}</p>
+      {% endfor %}
+      <p class="k" id="cutread">Keeps all {{ '%.1f' | format(c.duration) }}s.</p>
+      {% if has_suggestions %}
+      <button type="button" class="btn ghost" id="suggest">Apply what it measured</button>
+      <p class="k tiny">Only the moves the numbers justify &mdash; the cut, the straighten and the
+        mute are the three it can prove from your own frames.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Frame</strong></p>
+      <div class="row chipset" id="ratios">
+        <button type="button" class="chip on" data-ratio="">original</button>
+        {% for label, ratio in [('9:16', 0.5625), ('4:5', 0.8), ('1:1', 1.0), ('16:9', 1.7778), ('3:4', 0.75)] %}
+        <button type="button" class="chip" data-ratio="{{ ratio }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+      {% for op in controls if op.group == 'frame' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}"
+               step="{{ op.step }}" value="{{ op.neutral }}" data-neutral="{{ op.neutral }}"
+               data-unit="{{ op.unit }}">
+        <output>{{ op.neutral }}{{ op.unit }}</output></label>
+      {% if op.note %}<p class="k tiny">{{ op.note }}</p>{% endif %}
+      {% endfor %}
+      <label class="ctl"><span>mirror</span>
+        <input type="checkbox" id="flip"> <output>off</output></label>
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Tone</strong> &mdash; applied to every frame in the cut</p>
+      {% for op in controls if op.group == 'tone' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}"
+               step="{{ op.step }}" value="{{ op.neutral }}" data-neutral="{{ op.neutral }}"
+               data-unit="{{ op.unit }}">
+        <output>{{ op.neutral }}{{ op.unit }}</output></label>
+      {% if op.note %}<p class="k tiny">{{ op.note }}</p>{% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <p class="k"><strong>Finish</strong></p>
+      {% for op in controls if op.group == 'finish' and op.name == 'fade' %}
+      <label class="ctl"><span>{{ op.label }}</span>
+        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}"
+               step="{{ op.step }}" value="{{ op.neutral }}" data-neutral="{{ op.neutral }}"
+               data-unit="{{ op.unit }}">
+        <output>{{ op.neutral }}{{ op.unit }}</output></label>
+      <p class="k tiny">{{ op.note }}</p>
+      {% endfor %}
+      <label class="ctl"><span>sound off</span>
+        <input type="checkbox" id="mute">
+        <output>off</output></label>
+      <p class="k tiny">This clip {% if c.has_audio %}peaks at
+        {{ '%.0f' | format(c.max_db) if c.max_db is not none else 'an unreadable level' }} dB{%
+        else %}has no track at all{% endif %}. Muting writes no sound into the copy.</p>
+    </div>
+
+    <form method="post" action="/clip/save" class="card saveform">
+      <input type="hidden" name="name" value="{{ rel }}">
+      <input type="hidden" name="recipe" id="recipe" value="[]">
+      <div class="row">
+        <button type="submit" class="btn">Save a copy</button>
+        <span class="k" id="estimate">Re-encodes every frame in the cut at quality 22.</span>
+      </div>
+      <p class="k">The copy lands in <code>clips/edited</code> with its recipe beside it, so opening
+        it again brings these controls back and re-runs them on the original file. Your original is
+        opened read-only and never rewritten.</p>
+    </form>
+
+    <form method="post" action="/clip/cover" class="card">
+      <input type="hidden" name="name" value="{{ rel }}">
+      <input type="hidden" name="t" id="covert" value="{{ times[0] if times else 0 }}">
+      <button type="submit" class="btn ghost">Pull this frame out as a cover photo</button>
+      <p class="k">It saves the frame at {{ '%.2f' | format(times[0] if times else 0) }}s into the
+        photos folder and opens the photo editor, where you can finish it the way you would any
+        still. Nothing about the clip changes.</p>
+    </form>
+
+    <div class="need"><strong>What this will not do.</strong> No face slimming, no body reshaping,
+      no skin smoothing, no generated frames. ffmpeg has filters that do all four
+      (<code>dnn_processing</code> among them) and this app refuses to build a command line that
+      mentions them &mdash; there is a test for exactly that. Everything above moves, cuts,
+      brightens or fades pixels your camera already recorded.</div>
+
+    <p class="limit"><strong>Does not establish:</strong> {{ verdict.limit }}</p>
+  </div>
+</div>
+
+<script>
+const NAME = "{{ rel | urlencode }}";
+const DUR = {{ '%.3f' | format(c.duration) }};
+const shot = document.getElementById("clipshot");
+const status = document.getElementById("status");
+const scrub = document.getElementById("scrub");
+let t = parseFloat(scrub.value);
+let tone = {}, rotate = 0, ratio = 0, flip = 0, fade = 0, speed = 1;
+let start = 0, finish = DUR;
+
+function cutOn() { return start > 0.049 || finish < DUR - 0.049; }
+
+function neutral(name) {
+  const el = document.querySelector(`input[data-op="${name}"]`);
+  return el ? parseFloat(el.dataset.neutral) : 0;
+}
+
+function recipe() {
+  const r = [];
+  if (cutOn()) r.push(["trim", start, finish]);
+  if (Math.abs(speed - 1) > 0.005) r.push(["speed", speed]);
+  if (rotate) r.push(["rotate", rotate]);
+  if (ratio) r.push(["ratio", ratio]);
+  if (flip) r.push(["flip", 1]);
+  for (const k in tone) if (Math.abs(tone[k] - neutral(k)) > 0.005) r.push([k, tone[k]]);
+  if (fade > 0.049) r.push(["fade", fade]);
+  if (document.getElementById("mute").checked) r.push(["mute", 1]);
+  return r;
+}
+
+function url(r) {
+  return `/clip/preview?name=${NAME}&ops=${encodeURIComponent(JSON.stringify(r))}&t=${t.toFixed(3)}`;
+}
+
+function readout() {
+  const kept = Math.max(0.1, finish - start);
+  document.getElementById("cutread").textContent = cutOn()
+    ? `Keeps ${start.toFixed(2)}s\u2013${finish.toFixed(2)}s, ${kept.toFixed(1)}s of ${DUR.toFixed(1)}s.`
+    : `Keeps all ${DUR.toFixed(1)}s.`;
+  document.getElementById("estimate").textContent =
+    `Out about ${(kept / speed).toFixed(1)}s once speed is applied. Re-encodes every frame at quality 22.`;
+}
+
+function say(word) {
+  const n = recipe().length;
+  status.textContent = word || (n
+    ? `${n} control${n > 1 ? "s" : ""} applied to the frame at ${t.toFixed(2)}s.`
+    : "Nothing applied yet.");
+}
+
+let timer = null;
+function refresh(word) {
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    const r = recipe();
+    document.getElementById("recipe").value = JSON.stringify(r);
+    document.getElementById("covert").value = t.toFixed(2);
+    shot.src = `${url(r)}&x=${Date.now()}`;
+    readout();
+    say(word);
+  }, 240);
+}
+
+function setSlider(name, v) {
+  const el = document.querySelector(`input[data-op="${name}"]`);
+  if (el) { el.value = v; el.nextElementSibling.value = `${v}${el.dataset.unit}`; }
+}
+
+function setChip(v) {
+  document.querySelectorAll("#ratios [data-ratio]").forEach(x => {
+    const want = v ? Math.abs(parseFloat(x.dataset.ratio) - v) < 0.005 : !x.dataset.ratio;
+    x.classList.toggle("on", want);
+  });
+}
+
+function box(id, on, word) {
+  document.getElementById(id).checked = on;
+  document.getElementById(id).nextElementSibling.value = word;
+}
+
+document.querySelectorAll("input[data-op]").forEach(el => {
+  el.addEventListener("input", () => {
+    const v = parseFloat(el.value), name = el.dataset.op;
+    el.nextElementSibling.value = `${v}${el.dataset.unit}`;
+    if (name === "rotate") rotate = v;
+    else if (name === "speed") speed = v;
+    else if (name === "fade") fade = v;
+    else tone[name] = v;
+    refresh();
+  });
+});
+
+scrub.addEventListener("input", () => {
+  t = parseFloat(scrub.value);
+  document.getElementById("scrubout").value = `${t.toFixed(2)}s`;
+  refresh();
+});
+
+function clampScrub() {
+  scrub.min = start.toFixed(2);
+  scrub.max = finish.toFixed(2);
+  if (t < start || t > finish) {
+    t = Math.min(finish, Math.max(start, t));
+    scrub.value = t.toFixed(2);
+    document.getElementById("scrubout").value = `${t.toFixed(2)}s`;
+  }
+}
+
+function setEnd(which, v) {
+  if (which === "start" && v > finish - 1) {
+    finish = Math.min(DUR, v + 1);
+    const el = document.getElementById("finish");
+    el.value = finish.toFixed(2);
+    el.nextElementSibling.value = `${finish.toFixed(2)}s`;
+  } else if (which === "finish" && v < start + 1) {
+    start = Math.max(0, v - 1);
+    const el = document.getElementById("start");
+    el.value = start.toFixed(2);
+    el.nextElementSibling.value = `${start.toFixed(2)}s`;
+  }
+  if (which === "start") start = v; else finish = v;
+  clampScrub();
+}
+
+["start", "finish"].forEach(id => {
+  document.getElementById(id).addEventListener("input", ev => {
+    setEnd(id, parseFloat(ev.target.value));
+    refresh();
+  });
+});
+
+document.querySelectorAll(".frame").forEach(b => b.addEventListener("click", () => {
+  t = parseFloat(b.dataset.t);
+  scrub.value = t.toFixed(2);
+  document.getElementById("scrubout").value = `${t.toFixed(2)}s`;
+  refresh(`Frame at ${t.toFixed(2)}s.`);
+}));
+
+document.querySelectorAll("#ratios [data-ratio]").forEach(b => b.addEventListener("click", () => {
+  setChip(parseFloat(b.dataset.ratio));
+  ratio = parseFloat(b.dataset.ratio) || 0;   // the engine fits the box after straightening
+  refresh();
+}));
+
+document.getElementById("flip").addEventListener("change", e => {
+  flip = e.target.checked ? 1 : 0;
+  e.target.nextElementSibling.value = flip ? "left-right" : "off";
+  refresh();
+});
+
+document.getElementById("mute").addEventListener("change", e => {
+  e.target.nextElementSibling.value = e.target.checked ? "on" : "off";
+  refresh();
+});
+
+function clearAll() {
+  tone = {}; rotate = 0; ratio = 0; flip = 0; fade = 0; speed = 1;
+  start = 0; finish = DUR;
+  document.querySelectorAll("input[data-op]").forEach(el => {
+    const n = parseFloat(el.dataset.neutral);
+    el.value = n; el.nextElementSibling.value = `${n}${el.dataset.unit}`;
+  });
+  const a = document.getElementById("start"), b = document.getElementById("finish");
+  a.value = "0"; a.nextElementSibling.value = "0.00s";
+  b.value = DUR.toFixed(2); b.nextElementSibling.value = `${DUR.toFixed(2)}s`;
+  box("flip", false, "off");
+  box("mute", false, "off");
+  setChip(0);
+  clampScrub();
+}
+
+document.getElementById("reset").addEventListener("click", () => {
+  clearAll();
+  refresh("Reset.");
+});
+
+function apply(entries) {
+  entries.forEach(entry => {
+    const [name, ...args] = entry;
+    if (name === "trim") {
+      setEnd("start", args[0]);
+      setEnd("finish", args[1]);
+      document.getElementById("start").value = start.toFixed(2);
+      document.getElementById("start").nextElementSibling.value = `${start.toFixed(2)}s`;
+      document.getElementById("finish").value = finish.toFixed(2);
+      document.getElementById("finish").nextElementSibling.value = `${finish.toFixed(2)}s`;
+    } else if (name === "rotate") { rotate = args[0]; setSlider("rotate", args[0]); }
+    else if (name === "speed") { speed = args[0]; setSlider("speed", args[0]); }
+    else if (name === "fade") { fade = args[0]; setSlider("fade", args[0]); }
+    else if (name === "ratio") { ratio = args[0]; setChip(args[0]); }
+    else if (name === "flip") box("flip", true, "left-right");
+    else if (name === "mute") box("mute", true, "on");
+    else { tone[name] = args[0]; setSlider(name, args[0]); }
+  });
+  clampScrub();
+}
+
+const suggest = document.getElementById("suggest");
+if (suggest) suggest.addEventListener("click", () => {
+  clearAll();
+  apply({{ suggested | safe }});
+  refresh("Applied what it measured. Check each control before you save.");
+});
+
+function hold(id, fn) {
+  const el = document.getElementById(id);
+  ["mousedown", "touchstart"].forEach(e =>
+    el.addEventListener(e, ev => { ev.preventDefault(); fn(true); }));
+  ["mouseup", "mouseleave", "touchend"].forEach(e => el.addEventListener(e, () => fn(false)));
+}
+
+let comparing = false;
+hold("compare", on => {
+  if (on === comparing) return;
+  comparing = on;
+  shot.src = on ? url([]) : `${url(recipe())}`;
+  say(on ? "The original frame, nothing applied." : "Your edit.");
+});
+
+document.querySelector("form.saveform").addEventListener("submit", () => {
+  document.getElementById("recipe").value = JSON.stringify(recipe());
+  document.getElementById("covert").value = t.toFixed(2);
+  const btn = document.querySelector(".saveform button");
+  btn.disabled = true;
+  btn.textContent = `Encoding ${((finish - start) / speed).toFixed(1)}s here - keep this page open`;
+});
+
+const carried = {{ recipe_json | safe }};
+apply(carried);
+readout();
+// The page already painted this state, so a saved cut being re-opened costs one decode,
+// not two. Anything she touches after here refreshes as usual.
+if (carried.length) {
+  document.getElementById("recipe").value = JSON.stringify(carried);
+  document.getElementById("covert").value = t.toFixed(2);
+  say("Your saved edit, re-run on this file.");
+} else {
+  say();
+}
+</script>
+{% endif %}
+{% endblock %}

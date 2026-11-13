@@ -142,6 +142,12 @@ main:has(.editor) { max-width: 1420px; }
 .upload input[type=file] { color: var(--dim); font-size: 13px; max-width: 100%; }
 .saved { display: flex; flex-wrap: wrap; gap: 8px; }
 .saved a { font-size: 12.5px; }
+.strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; }
+.frame { padding: 0; border: 1px solid var(--line); border-radius: 10px; background: #0b0d11;
+  cursor: pointer; overflow: hidden; }
+.frame img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.frame span { display: block; padding: 3px 4px; font-size: 11px; text-align: center; }
+.stage.still img { max-height: 54vh; }
 
 @media (max-width: 1000px) {
   .editor { grid-template-columns: 1fr; }

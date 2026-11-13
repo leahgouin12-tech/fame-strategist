@@ -1657,3 +1657,46 @@ git commit -m "test: grep-enforced ToS guardrails and real-source check"
 **2. Placeholder scan.** No TBD or TODO steps remain. Three places name a deliberate stub and its upgrade path rather than leaving a hole: the offline engine (Tasks 3, 7, 9 all announce it in UI), the `[needs engine]` hook and caption, and the unstyled Phase 1 UI against the "must not look cheap" requirement, which is assigned to `day.html`/`plan.html` in Task 9 Step 3.
 
 **3. Type consistency.** `Store.load`, `validate_entry`, `Confidence`, `SourceTier`, `Engine.complete_json`, `InterviewAnswers`, `NicheHypothesis`, `rank`, `score_candidates`, `compose_plan`, `Plan.to_dict/from_dict`, `build_day`, `Day.as_checklist`, `MetricRow`, `read_csv`, `analyse`, `apply` are used with matching signatures across Tasks 1–10. Tests import shared `ENTRIES`/`ANSWERS` from `tests/strategist/test_niche.py`, which therefore needs `tests/__init__.py`, `tests/strategist/__init__.py` and `tests/playbook/__init__.py`; create them empty in Task 1 Step 3.
+
+---
+
+## Execution deviations — what was actually built
+
+Recorded after the fact, because the plan predates the media half of the app and a reader who
+follows the file paths above will not find them.
+
+| Plan said | Reality | Why |
+|---|---|---|
+| `src/app/server.py`, `src/app/__init__.py` | `src/app.py` (single module), `run.py` starts it on 127.0.0.1:8756 | One 500-line module was easier to keep honest than a package with one file in it. Nothing is exposed beyond localhost. |
+| `templates/day.html`, `templates/plan.html` | `templates/`: base, home, interview, niches, plan, today, sources, numbers, photos, edit, clips, clip | The app grew pages the plan did not foresee (see below). `today.html` and `plan.html` exist; `day.html` was never the name. |
+| `tests/app/test_server.py` | `tests/app/test_app.py`, `tests/app/test_clips.py` | Same coverage, split when the media routes arrived. |
+| Task 9 consumes `compose_plan`, `build_day`, `analyse` | Same, plus a media layer that did not exist when this plan was written | See the next paragraph. |
+
+**Built outside this plan entirely**, in the order the user asked for it (judge first, then the
+editor, then video):
+
+- `src/media/judge.py` + `src/media/aesthetic.py` — the photo judge (spec §5.3, deliberately not
+  Phase 1). Components, weights, and the `level` honesty gate.
+- `src/media/edit.py` — the Pillow edit engine and its recipe format, plus the non-negotiable
+  refusal: no operation may change how a person's face or body looks.
+- `templates/edit.html` — the interactive editor with live preview.
+- `src/media/clip.py` + `src/media/clipjudge.py` — the video engine on the ffmpeg bundled by
+  `imageio-ffmpeg`, and the five-frame clip judge that reuses the photo judge on each frame.
+- `templates/clips.html`, `templates/clip.html` — the clip list and the clip editor.
+- `requirements.txt`: `imageio-ffmpeg` added. It is the only new dependency, it costs nothing, and
+  it keeps the machine needing no configuration — which is the whole premise.
+
+**Still true from the plan:** the offline engine is the default and announces itself; every claim
+page shares who said it and what it misses; the app says what it cannot promise; nothing is
+exposed publicly, which `test_the_app_binds_nothing_public` enforces.
+
+**Not true from the plan:** the `outbound()` chokepoint was never written as a named function,
+because nothing in the built app has any reason to reach off the machine — the media pipeline is
+local (Pillow plus bundled ffmpeg) and the engine layer only sends text. When a phase first
+attaches an image to an outbound call, that is when the chokepoint has to exist, and it should be
+named then rather than left as a placeholder now.
+
+**Not built from Task 9:** `GET /weekly`. The plan named it and the spec's §5.11 depends on it;
+the route does not exist, and nothing pretends otherwise — `/plan` shows the week-by-week schedule
+and `/today` the day's shot list. Spec §10 now records the coach's cadence as fortnightly for
+whenever it is built, since credits are the scarce resource.

@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import Path
+import hashlib
 import io
 import json
 import shutil
@@ -9,10 +10,13 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from PIL import Image
 
 from src.config import Config
 from src.db import DB
 from src.engines.offline import OfflineEngine
+from src.media import clip as clipmod
+from src.media.clipjudge import CLIP_LABELS, CLIP_WEIGHTS, judge_clip, suggest
 from src.metrics.adapt import analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
@@ -380,6 +384,143 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         return RedirectResponse(
             f"/edit?name={quote(f'edited/{dst.name}')}&note=Saved+{quote(dst.name)}+with+{len(recipe)}"
             "+edits.+Score+" + str(after.score) + ".+The+original+was+not+touched.", status_code=303)
+
+    clips_dir = state_dir / "clips"
+    clips_edited = clips_dir / "edited"
+    frames_dir = state_dir / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/frames", StaticFiles(directory=str(frames_dir)), name="frames")
+
+    def clip_file(name: str) -> Path | None:
+        """Only her clips folder or her saved cuts - never a path somebody typed."""
+        target = (clips_dir / name).resolve()
+        if target.parent not in (clips_dir.resolve(), clips_edited.resolve()):
+            return None
+        if not target.is_file() or target.suffix.lower() not in clipmod.VIDEO_SUFFIXES:
+            return None
+        return target
+
+    def frame_key(src: Path) -> str:
+        """A saved cut shares its name with the clip it came from, so the decoded frames
+        of the two must never land on the same file."""
+        return f"{src.parent.name}-{src.stem}"[:80].replace(" ", "-")
+
+    def trim_previews(folder: Path, key: str, keep: int = 24) -> None:
+        """Preview files are keyed by every control state, so one long session can leave
+        hundreds behind. The newest few are what she is comparing; the rest are disk."""
+        for stale in sorted(folder.glob(f"{key}-*.png"),
+                            key=lambda p: p.stat().st_mtime)[:-keep]:
+            stale.unlink(missing_ok=True)
+
+    def clip_jpeg(png: Path, edge: int = 900) -> bytes:
+        with Image.open(png) as im:
+            scale = edge / max(im.size)
+            if scale < 1:
+                im = im.resize((max(1, int(im.width * scale)), max(1, int(im.height * scale))),
+                               Image.LANCZOS)
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, "JPEG", quality=82)
+        return buf.getvalue()
+
+    @app.get("/clips", response_class=HTMLResponse)
+    def clips_page(request: Request, note: str = ""):
+        clips_dir.mkdir(parents=True, exist_ok=True)
+        rows = [clipmod.probe(p) for p in clipmod.clip_files(clips_dir)]
+        saved = [clipmod.probe(p) for p in clipmod.clip_files(clips_edited)]
+        return page(request, "clips.html", clips=rows, saved=saved, folder=str(clips_dir),
+                    note=note, ffmpeg=clipmod.available(), weights=CLIP_WEIGHTS,
+                    names=CLIP_LABELS)
+
+    @app.post("/clips/upload", response_class=HTMLResponse)
+    async def clips_upload(request: Request, file: UploadFile = File(...)):
+        suffix = Path(file.filename or "").suffix.lower()
+        if suffix not in clipmod.VIDEO_SUFFIXES:
+            return clips_page(request, note=f"{suffix or 'That file'} is not a video this app can read.")
+        clips_dir.mkdir(parents=True, exist_ok=True)
+        stem = Path(file.filename).name.rsplit(".", 1)[0][:60] or "clip"
+        dst = next_name(clips_dir, stem, suffix)
+        with dst.open("wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+        return RedirectResponse(f"/clip?name={quote(dst.name)}", status_code=303)
+
+    @app.get("/clip", response_class=HTMLResponse)
+    def clip_page(request: Request, name: str = "", note: str = ""):
+        src = clip_file(name)
+        if src is None:
+            return clips_page(request, note="Pick a clip first - the editor opens one at a time.")
+        side = src.with_suffix(".json")
+        carried = clipmod.normalize(recipe_of(side.read_text(encoding="utf-8"))) if side.is_file() else []
+        verdict = judge_clip(src, frames_dir / frame_key(src))
+        trim_previews(frames_dir / "preview", frame_key(src))
+        tips = suggest(verdict)
+        return page(request, "clip.html", file_name=src.name,
+                    rel=str(src.relative_to(clips_dir)).replace("\\", "/"),
+                    verdict=verdict, times=clipmod.sample_times(verdict.clip.duration),
+                    frame_urls=[f.path.relative_to(frames_dir).as_posix() for f in verdict.frames],
+                    recipe_json=json.dumps(carried),
+                    initial_ops=quote(json.dumps(carried), safe=""),
+                    labels=clipmod.LABELS,
+                    controls=clipmod.CONTROLS, ranges=clipmod.RANGES,
+                    frame_ops=clipmod.FRAME_OPS,
+                    tone_ops=clipmod.TONE_OPS, finish_ops=clipmod.FINISH_OPS,
+                    weights=CLIP_WEIGHTS, names=CLIP_LABELS, suggested=json.dumps(tips),
+                    has_suggestions=bool(tips),
+                    note=note, ffmpeg=clipmod.available())
+
+    @app.get("/clip/preview")
+    def clip_preview(name: str = "", ops: str = "", t: float = 0.0):
+        src = clip_file(name)
+        if src is None:
+            raise HTTPException(status_code=404)
+        try:
+            entries = clipmod.normalize(recipe_of(ops))
+            tag = hashlib.sha1(f"{json.dumps(entries)}|{round(t, 3)}".encode()).hexdigest()[:12]
+            png = clipmod.preview_frame(src, t, entries,
+                                        frames_dir / "preview" / f"{frame_key(src)}-{tag}.png",
+                                        edge=clipmod.SHOW_EDGE)
+            return Response(clip_jpeg(png), media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
+        except RuntimeError:
+            raise HTTPException(status_code=404)
+
+    @app.post("/clip/save", response_class=HTMLResponse)
+    async def clip_save(request: Request):
+        form = await request.form()
+        raw = str(form.get("name", ""))
+        src = clip_file(raw)
+        if src is None:
+            return clips_page(request, note="That file is not in the clips folder.")
+        recipe = clipmod.normalize(recipe_of(str(form.get("recipe", ""))))
+        clips_edited.mkdir(parents=True, exist_ok=True)
+        dst = next_name(clips_edited, src.stem[:60], ".mp4")
+        try:
+            after = clipmod.export(src, dst, recipe)
+        except RuntimeError as exc:
+            return clip_page(request, name=raw, note=f"ffmpeg refused it: {exc}")
+        dst.with_suffix(".json").write_text(json.dumps(recipe, indent=1), encoding="utf-8")
+        return RedirectResponse(
+            f"/clip?name={quote(f'edited/{dst.name}')}&note=Saved+{quote(dst.name)}+as+"
+            f"{after.width}x{after.height}+for+{after.duration:.1f}s.+The+original+was+not+touched.",
+            status_code=303)
+
+    @app.post("/clip/cover", response_class=HTMLResponse)
+    async def clip_cover(request: Request):
+        form = await request.form()
+        raw = str(form.get("name", ""))
+        src = clip_file(raw)
+        if src is None:
+            return clips_page(request, note="That file is not in the clips folder.")
+        try:
+            stamp = max(0.0, float(form.get("t", 0) or 0))
+        except ValueError:
+            stamp = 0.0
+        inbox_dir.mkdir(parents=True, exist_ok=True)
+        dst = next_name(inbox_dir, f"{src.stem[:40]}-cover", ".jpg")
+        try:
+            clipmod.cover(src, stamp, dst)
+        except RuntimeError as exc:
+            return clip_page(request, name=raw, note=f"No frame there: {exc}")
+        return RedirectResponse(f"/edit?name={quote(dst.name)}", status_code=303)
 
     return app
 

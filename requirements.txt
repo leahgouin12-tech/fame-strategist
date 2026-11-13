@@ -6,3 +6,4 @@ Pillow
 httpx
 pytest
 pillow-heif
+imageio-ffmpeg
