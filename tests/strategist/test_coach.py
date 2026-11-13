@@ -107,14 +107,14 @@ def test_research_lists_only_the_claims_behind_this_week_and_dates_them():
     assert {e["id"] for e in r.used} == {"algorithm-retention", "conversion-series",
                                          "format-need-face"}
     assert all(e["as_of"] and e["sources"][0]["url"].startswith("https://") for e in r.used)
-    assert "no live trend research" in r.note.lower()
+    assert "no trend research is live" in r.note.lower()
 
 
 def test_the_spend_line_is_zero_because_nothing_was_called():
     s = agenda(rows=[row("p", 20.0, 5)], landed=["a.png"]).spend
     assert s.credits.startswith("0 model credits")
     assert s.local == "1 frame scored and 1 post read, all local CPU."
-    assert "does not exist yet" in s.next_time
+    assert "credits, not quota" in s.next_time
 
 
 def test_there_is_always_something_to_propose_and_never_a_claim_to_have_acting():
