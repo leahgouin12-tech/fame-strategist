@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Trends &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>What research found, and how stale it is</h1>
+<p class="sub">A trend is a claim with an as-of date. {{ run.note }}</p>
+
+{% if run.findings %}
+  {% for f in run.findings %}
+  <div class="card">
+    <div class="row">
+      <span class="chip {{ f.confidence }}">{{ f.confidence }}</span>
+      <span class="chip {{ 'proven' if f.days_old <= 14 else 'contested' }}">{{ f.age_words }}</span>
+      {% if f.in_this_week %}<span class="chip on">in your slot this week</span>{% endif %}
+      <span class="k">as of {{ f.as_of }} &middot; {{ f.id }}</span>
+    </div>
+    <p class="claim"><strong>{{ f.claim }}</strong></p>
+    <p class="limit"><strong>What it does not establish:</strong> {{ f.does_not_claim }}</p>
+    <details {% if loop.first %}open{% endif %}>
+      <summary>why it is believed &middot; {{ f.sources|length }}
+        {% if f.sources|length == 1 %}source{% else %}sources{% endif %} ({{ f.tiers|join(', ') }})</summary>
+      <p class="k">{{ f.why_now }}</p>
+      <ul>
+        {% for s in f.sources %}
+        <li><a href="{{ s.url }}">{{ s.title }}</a> <span class="chip">{{ s.tier }}</span></li>
+        {% endfor %}
+      </ul>
+    </details>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="card">
+  <h3>Nothing is live, so the library is driving</h3>
+  <p class="claim">This is the designed fallback, not an error. {{ library }} playbook claims stay
+    behind your slots &mdash; mechanisms and platform rules do not expire on a schedule &mdash; and
+    your own numbers outrank all of them. What you do not get is a sentence claiming something is
+    rising this week, because nothing here has been opened and dated recently enough to say that.</p>
+  <p class="k">Run the brief below, then reload this page. <a href="/sources">See the library</a>.</p>
+</div>
+{% endif %}
+
+{% if run.settled %}
+<h2>Expired findings &mdash; kept, no longer sold as trends</h2>
+<div class="card">
+  {% for f in run.settled %}
+  <p class="k"><strong>{{ f.id }}</strong> &middot; {{ f.age_words }} &middot;
+    {{ f.claim[:110] }}{% if f.claim|length > 110 %}&hellip;{% endif %}</p>
+  {% endfor %}
+  <p class="limit">These still count as playbook claims where their mechanism holds. They stopped
+    counting as trend evidence because reach is front-loaded: a format everybody read about six
+    weeks ago is the baseline now, not the head start.</p>
+</div>
+{% endif %}
+
+<h2>How the next run happens</h2>
+<div class="card">
+  <p class="claim">This app has no browser, no login and no scraper, so it cannot see what is
+    rising. The agent does. Paste the brief below into a Qoder conversation and it will open
+    sources, reject the ones it cannot stand behind, and write what survives into
+    <code>data/playbook</code> as dated entries this page reads back.</p>
+  <textarea id="brief" rows="18" readonly>{{ brief_text }}</textarea>
+  <p class="row"><button type="button" id="btn-brief">Copy the research brief</button>
+    <span class="k" id="brief-state"></span></p>
+</div>
+
+<div class="card">
+  <h3>What this page will not do</h3>
+  <p class="claim">It will not hand you a hashtag list &mdash; a trend that is one to three days
+    old is already spent, and chasing it by tag is the part of &ldquo;growth&rdquo; that turns a
+    post into a copy. It will not tell you a posting time; that is measured from your own ledger,
+    not from a chart. It will not invent a finding to fill this screen: an empty page with a
+    reason is worth more than a confident sentence with no address behind it. And nothing on it
+    touches an account &mdash; every link opens in your browser, from your machine, by your click.</p>
+</div>
+
+<script>
+  document.getElementById("btn-brief").addEventListener("click", async () => {
+    const box = document.getElementById("brief");
+    box.focus();
+    box.select();
+    try {
+      await navigator.clipboard.writeText(box.value);
+      document.getElementById("brief-state").textContent = "On your clipboard.";
+    } catch (err) {
+      document.execCommand("copy");
+      document.getElementById("brief-state").textContent = "Selected &mdash; press Ctrl+C.";
+    }
+  });
+</script>
+{% endblock %}

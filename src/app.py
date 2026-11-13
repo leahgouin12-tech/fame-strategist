@@ -25,8 +25,9 @@ from src.media.aesthetic import WEIGHTS, judge_photo
 from src.media.clean import fix
 from src.media.edit import PRESETS, SAVE_QUALITY, SLIDERS, edit_file, normalize
 from src.media.judge import IMAGE_SUFFIXES, inbox_files, judge, measure
+from src.playbook import research
 from src.playbook.store import Store
-from src.strategist.coach import CADENCE_DAYS, build_agenda
+from src.strategist.coach import CADENCE_DAYS, _week_at, build_agenda
 from src.strategist.daily import build_day, subject_of
 from src.strategist.interview import Interview, InterviewAnswers
 from src.strategist.niche import brief, rank, score_candidates
@@ -444,6 +445,27 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         db.save_graph([])
         cleared = "Every handle forgotten. The diff is empty until you upload an export again."
         return RedirectResponse(f"/graph?note={quote(cleared)}", status_code=303)
+
+    @app.get("/trends", response_class=HTMLResponse)
+    def trends(request: Request):
+        """Spec 5.10: dated findings, or the plain statement that no research is live.
+
+        The app fetches nothing, so a finding is only ever something an agent opened and wrote
+        into the playbook with a date on it. The age is the product here, not a footnote.
+        """
+        plan = plan_or_none()
+        entries, _pending = load_playbook()
+        week = _week_at(plan, date.today()) if plan else None
+        result = research.run(entries, date.today(), week.focus_entry_ids if week else ())
+        answers = db.get_interview()
+        the_brief = research.brief(
+            platforms=getattr(answers, "platforms", []) or [],
+            hypotheses=plan.hypotheses if plan else [],
+            chosen=week.experiment if week else "",
+            hours_per_week=getattr(answers, "hours_per_week", 0) or 0,
+        )
+        return page(request, "trends.html", run=result, brief_text=the_brief, plan=plan,
+                    week=week, library=len(entries))
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(request: Request, tier: str | None = None):

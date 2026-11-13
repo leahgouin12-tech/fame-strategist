@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from src.metrics.adapt import DATA_FLOOR, analyse
+from src.playbook import research
 
 # Spec §10: fortnightly, not weekly - a week would mostly re-measure the same posts.
 CADENCE_DAYS = 14
@@ -220,9 +221,16 @@ def _research(entries, week, today: date) -> Research:
             for e in picked]
     stale = [e.id for e in picked if e.is_stale(today)]
     pending = [e.id for e in picked if e.has_placeholder_source()]
-    note = ("No live trend research has run - that layer is not built, and this page will not "
-            "pretend it has. What sits behind your slots is the playbook you already have, "
-            "with the date each claim was checked and the address it was checked at.")
+    trend = research.run(entries, today, focus)
+    if trend.ran:
+        newest = trend.findings[0]
+        named = ", ".join(f.id for f in trend.findings[:3])
+        note = (f"{trend.count} researched finding{'' if trend.count == 1 else 's'} still live, "
+                f"newest {newest.age_words}: {named}. Each was opened and dated by a research run, "
+                "and each says what it does not establish. Everything else behind your slots is "
+                "the playbook, which is checked the same way but does not expire on a schedule.")
+    else:
+        note = trend.note
     return Research(used=used, stale=stale, pending=pending, note=note)
 
 
@@ -238,8 +246,9 @@ def _spend(rows, landed, engine_name: str, offline: bool) -> Spend:
     return Spend(credits,
                  f"{_n(len(landed), 'frame')} scored and {_n(len(rows), 'post')} read, "
                  "all local CPU.",
-                  "The next run costs the same unless you ask for trend research, which does "
-                  "not exist yet - so the honest forecast is zero.")
+                  "This page again costs nothing. A trend research run is the one thing that "
+                  "does: it is the agent opening sources, and it spends your credits, not quota. "
+                  "The /trends page says when the last one was dated.")
 
 
 def _week_at(plan, day: date):

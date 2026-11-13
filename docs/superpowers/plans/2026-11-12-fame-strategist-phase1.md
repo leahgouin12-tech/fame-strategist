@@ -1749,6 +1749,20 @@ named then rather than left as a placeholder now.
   anybody left over — a pairing, not a cause. The table is one row so the **Forget** button can
   actually empty it: other people's handles are the most personal thing this app holds.
 
+- `src/playbook/research.py` + `templates/trends.html` (spec §5.10): the research layer is
+  deliberately not an API. The app fetches nothing, so a *finding* is a playbook entry tagged
+  `trend` - written by an agent that actually opened an address - and the only thing this module
+  adds is the clock: `run()` splits the playbook into findings still inside `FRESH_DAYS` and
+  findings that have settled back into the library, because reach is front-loaded and a format
+  everybody read about six weeks ago is the baseline, not a head start. Four findings shipped with
+  it, dated 2026-11-13, from TikTok's own Next 2026 report, Buffer's 2026 engagement analysis and
+  the Vogue Business tracker, each with a `does_not_claim` naming what the source cannot support
+  (a platform's ad-side forecast, cumulative tag counts rather than velocity, a benchmark window
+  that ends in 2024). When nothing is fresh the page says so and the library keeps driving - the
+  spec's degrade path, not an error state. `brief()` is how the next run happens: a paste-ready
+  instruction built from her real platforms, lanes and hours, which asks for an as-of date, a
+  confidence and a rejection clause, and refuses hashtag lists, posting times and account actions
+  in the text itself. It carries no URL, because the app has no browser to open one with.
+
 **Not built:** §5.7 scheduler and §5.9's two-currency spend tracker beyond the coach's cost
-card, plus §5.10 trend research - the coach states plainly that no research has run instead of
-dressing up the playbook as a fresh find.
+card.

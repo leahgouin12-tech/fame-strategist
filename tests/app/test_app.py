@@ -400,7 +400,7 @@ def test_the_coach_reads_the_last_numbers_import(planned):
     body = planned.get("/weekly").text
     assert "2 posts from your last import" in body
     assert "a" in body and "generic" in body, "under 25 posts the coach says it is generic"
-    assert "No live trend research has run" in body
+    assert "not built" not in body, "the research layer exists; the coach must not claim otherwise"
 
 
 def test_the_coach_shows_the_dated_sources_behind_the_current_slots(planned):
@@ -522,3 +522,33 @@ def test_the_follow_ups_come_from_the_post_she_actually_measured(planned):
     page = planned.get("/engage").text
     assert "part two" in page and "clip-0042" in page
     assert "is under the 8 this app needs" in page, "one winner is not a pattern yet"
+
+
+def test_the_trends_page_shows_findings_with_their_age_and_address(planned):
+    body = planned.get("/trends").text
+    assert "as of 2026-" in body, "a finding without a date is just an opinion"
+    assert re.search(r"(dated today|day old|days old|weeks old|months old)", body)
+    assert "does not establish" in body.lower()
+    assert re.search(r'<a href="https://[^"]+">[^<]+</a> <span class="chip">', body), \
+        "each finding links what it was read at"
+
+
+def test_the_trends_page_never_claims_a_live_trend_it_cannot_show(planned):
+    body = planned.get("/trends").text
+    live = "still standing" in body
+    empty = "No trend research is live" in body
+    assert live != empty, "exactly one of the two states is true on any given day"
+
+
+def test_the_research_brief_is_paste_ready_and_holds_no_address(planned):
+    body = planned.get("/trends").text
+    block = re.search(r'id="brief"[^>]*>(.*?)</textarea>', body, re.S).group(1)
+    assert "Run the trend research" in block
+    assert "Do not give me a hashtag list." in block
+    assert "http" not in block, "the app fetches nothing, so it hands over no URLs of its own"
+
+
+def test_the_trends_page_states_its_own_limits(planned):
+    body = planned.get("/trends").text
+    assert "no browser" in body
+    assert "posting time" in body
