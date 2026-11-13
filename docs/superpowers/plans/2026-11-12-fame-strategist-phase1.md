@@ -1800,6 +1800,23 @@ named then rather than left as a placeholder now.
   with the cell left empty rather than filled with an invented zero — nothing here can read a
   Qoder balance, and the coach's cost card now quotes the same counted number.
 
+**After the feature list closed**, the user asked to watch the editing run, and running it found
+what reading it had not: `/photos/clean` wrote its corrected copy into `inbox/clean`, a folder the
+Saved-edits strip never listed and `inbox_file()` refused to open, so a one-tap fix disappeared
+after the note that announced it faded (`81d4580`). The same run measured the rubric honestly and
+left it alone — every tile, including a correctly exposed editorial frame at 2.4, read *weak*,
+because the points come mostly from `breathing` and `level` refuses to guess at a frame with no
+horizontal line; reweighting on three synthetic fixtures is the guess §5.9 exists to avoid.
+
+Then, outside the plan entirely: she asked for this to be an installed app rather than an address
+(`0f59871`). `src/static/manifest.webmanifest` plus two real PNG icons and `start_url`/`display`
+make Edge and Chrome offer *Install this site*, which puts a Start-menu entry with its own window
+on her machine, and `run.py` now opens `--app` mode itself so a double-click lands in a window with
+no address bar instead of a tab. The iOS half of that request is not a flag: an `.ipa` needs Xcode,
+free Apple ID signing expires every 7 days, and a phone can only reach this app if it stops binding
+`127.0.0.1` — which `test_the_server_never_binds_outside_localhost` exists to prevent, so the LAN
+question stays a decision she makes rather than a change the code sneaks.
+
 **Not built:** nothing left in the Phase 1 feature list. What still does not exist is outside an
 app that runs on her machine with no server and no schedule of its own: the coach still needs her
 to open `/weekly` (§5.11's trigger), a trend run still needs the agent to paste the brief and
