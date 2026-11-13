@@ -18,7 +18,7 @@ from src.db import DB
 from src.engines.offline import OfflineEngine
 from src.media import clip as clipmod
 from src.media.clipjudge import CLIP_LABELS, CLIP_WEIGHTS, judge_clip, suggest
-from src.metrics.adapt import analyse, apply
+from src.metrics.adapt import DATA_FLOOR, analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
 from src.media.clean import fix
@@ -30,7 +30,7 @@ from src.strategist.daily import build_day, subject_of
 from src.strategist.interview import Interview, InterviewAnswers
 from src.strategist.niche import brief, rank, score_candidates
 from src.strategist.plan import Plan, compose_plan
-from src.strategist import voice
+from src.strategist import engage, voice
 
 ROOT = Path(__file__).resolve().parent.parent
 PLAYBOOK_DIR = ROOT / "data" / "playbook"
@@ -347,6 +347,63 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                 "actually wrote." if blocks else
                 "Cleared. The writer is back to guessing, and it will say so on every line.")
         return RedirectResponse(f"/write?note={quote(note)}", status_code=303)
+
+    @app.get("/engage", response_class=HTMLResponse)
+    def engage_page(request: Request, note: str = ""):
+        """Spec 5.13. The app takes the labour out of a reply and leaves the reply's facts to
+        the person who knows them: drafts only, no login, nothing sent from here."""
+        store = db.get_engage()
+        profile = voice.learn(db.get_voice())
+        drafts = engage.plan(engage.parse(store["comments"]), profile)
+        for d in drafts:
+            d.replied = d.key in set(store["replied"])
+        rows = []
+        path = state_dir / "metrics-last.csv"
+        if path.is_file():
+            try:
+                rows = read_csv(path)
+            except ValueError:
+                rows = []
+        best = None
+        if rows:
+            top = max(rows, key=lambda r: r.follow_rate_per_1000)
+            best = {"post_ref": top.post_ref, "hypothesis": top.hypothesis,
+                    "views": top.views}
+        return page(
+            request, "engage.html", profile=profile, drafts=drafts,
+            queue=engage.queue_note(drafts), watch=engage.watch_rows(store["targets"], profile),
+            series=engage.series_rows(best, profile) if best else [], best=best,
+            checks=engage.bio_review(store["bio"]), posts=len(rows), floor=DATA_FLOOR,
+            comments=store["comments"], targets=store["targets"], bio=store["bio"],
+            note=note,
+        )
+
+    @app.post("/engage/read", response_class=HTMLResponse)
+    async def engage_read(request: Request):
+        form = await request.form()
+        store = db.get_engage()
+        for field in ("comments", "targets", "bio"):
+            store[field] = str(form.get(field, "") or "")
+        db.save_engage(store)
+        worth = len([d for d in engage.plan(engage.parse(store["comments"]),
+                                            voice.learn(db.get_voice())) if not d.refused])
+        note = (f"Read here, on this machine: {worth} "
+                f"{'reply' if worth == 1 else 'replies'} drafted. "
+                "Nothing was sent, scheduled or logged into anywhere.")
+        return RedirectResponse(f"/engage?note={quote(note)}", status_code=303)
+
+    @app.post("/engage/replied", response_class=HTMLResponse)
+    def engage_replied(key: str = Form("")):
+        """A tick on her list, not a platform action - the app cannot see her inbox."""
+        store = db.get_engage()
+        marked = set(store["replied"])
+        if key in marked:
+            marked.remove(key)
+        else:
+            marked.add(key)
+        store["replied"] = sorted(marked)
+        db.save_engage(store)
+        return RedirectResponse("/engage", status_code=303)
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(request: Request, tier: str | None = None):

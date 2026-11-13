@@ -169,9 +169,15 @@ def learn(samples: list[str]) -> VoiceProfile:
     )
 
 
-def _recase(text: str, profile: VoiceProfile) -> str:
+def recase(text: str, profile: VoiceProfile) -> str:
+    """Public because the engagement drafts case themselves the same way she does. Every
+    frame is written lowercase, so a writer who capitals gets the first letter back."""
+    if not profile.learned:
+        return text
     if profile.case_style == "lowercase":
         return text.lower()
+    if profile.case_style == "capitalised":
+        return text[:1].upper() + text[1:]
     return text
 
 
@@ -192,8 +198,8 @@ def package(subject: str, hypothesis: str, day: date, profile: VoiceProfile,
     out = []
     for platform in platforms:
         rules = PLATFORM_RULES[platform]
-        hook = _recase(_fit(base_hook, max(8, int(rules["words"] * 0.6))), profile)
-        caption = _recase(_fit(base_caption, rules["words"]), profile)
+        hook = recase(_fit(base_hook, max(8, int(rules["words"] * 0.6))), profile)
+        caption = recase(_fit(base_caption, rules["words"]), profile)
         if profile.learned and profile.questions >= 0.34 and "?" not in caption:
             caption = caption.rstrip(".") + "?"
             why_q = f"You question {round(100 * profile.questions)}% of the time, so the line ends open."

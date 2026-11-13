@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Engage &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Engage</h1>
+<p class="sub">The replies, the bio, the follow-up posts &mdash; written up to the last sentence
+and then left to you. Copy a screen of comments into the box and each one comes back with a draft
+in your voice with the part only you know left as a blank. <strong>Nothing on this page sends,
+schedules or logs into anything.</strong> You tap send with your own thumbs.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>Paste what you are looking at</h3>
+  <form method="post" action="/engage/read">
+    <label>Comments &mdash; one per line, <code>name: text</code> or plain text</label>
+    <textarea name="comments" rows="6"
+      placeholder="maria: what pants are those?&#10;check my page for free followers&#10;jules: obsessed with this">{{ comments }}</textarea>
+    <label>Accounts you want to be in the comments of &mdash; one per line</label>
+    <textarea name="targets" rows="4"
+      placeholder="noor: she posted a rack of thrifted blazers&#10;@sam">{{ targets }}</textarea>
+    <label>Your bio, exactly as it is live</label>
+    <textarea name="bio" rows="3"
+      placeholder="outfits under &pound;30 | new every week | link in bio">{{ bio }}</textarea>
+    <button type="submit">Read these</button>
+    <span class="k">Stays in this app&rsquo;s file on this machine. Pasting it is how this page
+      works without a login &mdash; the alternative is the app signing in as you, and this build
+      does not do that.</span>
+  </form>
+</div>
+
+<h2>The queue</h2>
+<p class="k">{{ queue }}</p>
+
+{% for d in drafts %}
+<div class="card">
+  {% if d.refused %}
+  <div class="row"><span class="chip contested">refused</span>
+    <h3 style="margin:0">{{ d.author }}</h3></div>
+  <p class="claim">&ldquo;{{ d.comment }}&rdquo;</p>
+  <p class="limit">{{ d.why }}</p>
+  {% else %}
+  <div class="row"><span class="chip">{{ d.intent }}</span>
+    <h3 style="margin:0">{{ d.author }}</h3></div>
+  <p class="k">Their comment: &ldquo;{{ d.comment }}&rdquo;</p>
+  <p class="claim" style="font-size:19px">{{ d.line }}</p>
+  <p class="need">You fill: {{ d.fills | join(' and ') }}.</p>
+  <label>What you copy</label>
+  <textarea id="copy-{{ loop.index }}" rows="2">{{ d.line }}</textarea>
+  <p>
+    <button type="button" id="btn-{{ loop.index }}">Copy this reply</button>
+    <form method="post" action="/engage/replied" style="display:inline">
+      <input type="hidden" name="key" value="{{ d.key }}">
+      <button type="submit">{{ 'Re-mark as not replied' if d.replied else 'I replied to this' }}</button>
+    </form>
+    <span class="k" id="note-{{ loop.index }}"></span>
+  </p>
+  <p class="k">{{ d.why }}</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if not drafts %}
+<div class="card">
+  <h3>Nothing pasted yet</h3>
+  <p class="claim">Every platform lets you select the comments on your own post and copy them.
+    Paste them above and this becomes a list you can work through in one sitting &mdash; the
+    replies that convert are at the top, the ones not worth two minutes are at the bottom with a
+    reason.</p>
+</div>
+{% endif %}
+
+{% if watch %}
+<h2>Fifteen minutes in other people&rsquo;s comments</h2>
+<div class="card">
+  {% for w in watch %}
+  <p class="claim" style="margin-bottom:2px">{{ w.who }}</p>
+  <p class="k">{% if w.note %}What they posted, in your words: {{ w.note }}{% else %}No note, so
+    nothing is assumed about what they posted.{% endif %}</p>
+  <textarea id="watch-{{ loop.index }}" rows="2">{{ w.line }}</textarea>
+  <p><button type="button" id="wbtn-{{ loop.index }}">Copy</button>
+    <span class="k" id="wnote-{{ loop.index }}"></span></p>
+  <p class="k">{{ w.why }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if bio %}
+<h2>Your bio, measured</h2>
+<div class="card">
+  <p class="claim">{{ bio }}</p>
+  <ul class="assume">
+    {% for c in checks %}
+    <li><span class="chip {{ 'proven' if c.passed else 'contested' }}">{{ c.name }}</span>
+      {{ c.note }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if series %}
+<h2>Follow-ups to your own best post</h2>
+<p class="k">Proposed from {{ best.post_ref }} ({{ best.views }} views measured here
+  {% if posts < floor %} &middot; only {{ posts }} post{% if posts != 1 %}s{% endif %} read, which
+  is under the {{ floor }} this app needs before it calls anything a pattern{% endif %}).</p>
+<div class="card">
+  {% for s in series %}
+  <p class="claim" style="margin-bottom:2px">{{ s.title }}</p>
+  <p class="k">{{ s.why }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>What this page will not do</h3>
+  <p class="claim">It will not reply for you. No auto-reply, no scheduled comment, no DM to a
+    stranger, no batch action across accounts &mdash; those are the parts of &ldquo;grow my
+    account&rdquo; that get accounts restricted and readers distrustful, and a reply you did not
+    write stops being a reason anyone follows.</p>
+  <p class="limit">It will not invent the middle of a sentence. Where the answer needs a price, a
+    size, a stock status or something you saw on another person&rsquo;s post, the line keeps a
+    <strong>____</strong> and says what belongs in it.</p>
+</div>
+
+<script>
+  {% for d in drafts %}{% if not d.refused %}
+  document.getElementById("btn-{{ loop.index }}").addEventListener("click", async () => {
+    const box = document.getElementById("copy-{{ loop.index }}");
+    box.focus();
+    box.select();
+    try {
+      await navigator.clipboard.writeText(box.value);
+    } catch (e) {
+      document.execCommand("copy");
+    }
+    document.getElementById("note-{{ loop.index }}").textContent =
+      "Copied, blanks included - fill them before you send. If nothing landed, the text is "
+      + "selected: press Ctrl+C.";
+  });
+  {% endif %}{% endfor %}
+  {% for w in watch %}
+  document.getElementById("wbtn-{{ loop.index }}").addEventListener("click", async () => {
+    const box = document.getElementById("watch-{{ loop.index }}");
+    box.focus();
+    box.select();
+    try {
+      await navigator.clipboard.writeText(box.value);
+    } catch (e) {
+      document.execCommand("copy");
+    }
+    document.getElementById("wnote-{{ loop.index }}").textContent =
+      "Copied - fill the blank with something you actually saw.";
+  });
+  {% endfor %}
+</script>
+{% endblock %}

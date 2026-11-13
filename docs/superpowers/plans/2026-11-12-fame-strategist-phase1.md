@@ -1726,7 +1726,20 @@ named then rather than left as a placeholder now.
   the alt-text refusal. It makes no model call, so nothing she pastes can leave the machine.
   Spec §5.6 says "alt text always"; the built app keeps §5.8's stance and refuses to write it,
   because the judge measures light and steadiness and cannot know what is in the frame.
+- `src/strategist/engage.py` + `templates/engage.html` + the `engage` table (spec §5.13): comments
+  are pasted, never fetched — the spec's own footnote says comment read/reply on TikTok and
+  Instagram needs a Business/Creator login, and §2's permanent non-goals rule out the app signing
+  in as her. `classify()` sorts each line into demand / question / praise / criticism / human / spam
+  and `plan()` queues them in that conversion order with spam refused at the bottom; every drafted
+  reply keeps a `____` where the answer is a price, a size, a stock status or something only she
+  saw, and says what belongs in the blank. The drafts are recased by the voice profile, so they
+  read like her messages rather than like an auto-responder. Alongside the queue: a bio review
+  measured from the words she pasted (ask count, named audience, searchable nouns, length against
+  the real 80/150/160 platform limits, and a cadence promise checked against the plan's weekly
+  target), continuation proposals built from her own measured best post, and a watch list whose
+  accounts are hers because the app browses nothing. "Approve-and-tap" is literal — copy button,
+  clipboard, and a local tick that marks her own list, not a platform action.
 
 **Not built:** §5.7 scheduler, §5.9 two-currency spend tracker beyond the coach's cost card,
-§5.10 trend research, §5.12 follower-graph diffing, §5.13 engagement drafting. The coach states
+§5.10 trend research, §5.12 follower-graph diffing. The coach states
 plainly that no research has run instead of dressing up the playbook as a fresh find.

@@ -457,3 +457,68 @@ def test_the_writer_still_learns_before_a_plan_exists(client):
     client.post("/write/samples", data={"samples": SAMPLES})
     page = client.get("/write").text
     assert "No line to rewrite yet" in page and "2 samples" in page
+
+
+COMMENTS = ("maria: what pants are those?\n"
+            "jules: obsessed with this fit\n"
+            "check my page for free followers\n"
+            "lee: this is so cringe")
+
+
+def test_the_engage_page_is_empty_and_says_how_to_fill_it(planned):
+    page = planned.get("/engage").text
+    assert "Nothing pasted yet" in page
+    assert "will not reply for you" in page
+    assert "It will not invent the middle of a sentence" in page
+
+
+def test_pasting_comments_gives_drafts_with_the_answer_left_blank(planned):
+    page = planned.post("/engage/read", data={"comments": COMMENTS}).text
+    assert "____" in page, "the price and the sizing stay hers"
+    assert "refused" in page and "No reply, on purpose" in page
+    assert "4 comments read, 3 worth a reply, 1 refused" in page
+    assert "3 replies drafted" in page and "Nothing was sent" in page
+
+
+def test_the_queue_starts_with_the_replies_that_convert(planned):
+    planned.post("/engage/read", data={"comments": COMMENTS})
+    page = planned.get("/engage").text
+    order = [i for i in ("demand", "question", "praise", "criticism") if f'>{i}<' in page]
+    assert order[0] == "demand", "the price question is the one that turns into a follow"
+
+
+def test_the_reply_tick_is_kept_between_visits(planned):
+    planned.post("/engage/read", data={"comments": COMMENTS, "bio": "", "targets": ""})
+    key = "jules|obsessed with this fit"
+    assert f'value="{key}"' in planned.get("/engage").text, "every draft carries its own handle"
+    planned.post("/engage/replied", data={"key": key})
+    stored = planned.app.state.db.get_engage()
+    assert stored["replied"] == [key], "a tick is her list, not a platform action"
+    assert "Re-mark as not replied" in planned.get("/engage").text
+    planned.post("/engage/replied", data={"key": key})
+    assert planned.app.state.db.get_engage()["replied"] == []
+
+
+def test_the_bio_is_read_back_with_the_rules_it_applied(planned):
+    planned.post("/engage/read", data={"comments": "", "targets": "",
+                                       "bio": "outfits | link in bio | shop my store"})
+    page = planned.get("/engage").text
+    assert "2 calls to action found" in page
+    assert "Nobody is named" in page
+    assert "80" in page, "the real per-platform limits, not one vague length rule"
+
+
+def test_the_watch_list_is_hers_with_the_detail_left_hers(planned):
+    planned.post("/engage/read", data={"comments": "", "bio": "",
+                                       "targets": "noor: she posted a rack of thrifted blazers"})
+    page = planned.get("/engage").text
+    assert "Fifteen minutes" in page and "noor" in page
+    assert "not accounts the app found" in page.lower()
+
+
+def test_the_follow_ups_come_from_the_post_she_actually_measured(planned):
+    planned.post("/numbers", data={"quick": "clip-0042 1200 41 3\nclip-0099 900 12 1\n"})
+    planned.post("/engage/read", data={"comments": "", "targets": "", "bio": ""})
+    page = planned.get("/engage").text
+    assert "part two" in page and "clip-0042" in page
+    assert "is under the 8 this app needs" in page, "one winner is not a pattern yet"
