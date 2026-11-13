@@ -8,8 +8,10 @@
 <div class="card">
   <form method="post" action="/numbers">
     <label>Your numbers &mdash; one post per line</label>
-    <textarea name="quick" rows="6" placeholder="1200 41 3&#10;860 18 0&#10;2400 52 11"></textarea>
+    <textarea name="quick" rows="6" placeholder="clip-0042 1200 41 3 18:40&#10;860 18 0&#10;2400 52 11 09:15"></textarea>
     <button type="submit">Read them</button>
+    <p class="k">A trailing clock time is optional and is the only way this app ever learns when
+      you post: twenty timed rows and the Today page names your own window instead of a default.</p>
   </form>
   {% if note %}<p class="k">{{ note }}</p>{% endif %}
 </div>

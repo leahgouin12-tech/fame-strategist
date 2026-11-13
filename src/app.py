@@ -31,6 +31,7 @@ from src.strategist.coach import CADENCE_DAYS, _week_at, build_agenda
 from src.strategist.daily import build_day, subject_of
 from src.strategist.interview import Interview, InterviewAnswers
 from src.strategist.niche import brief, rank, score_candidates
+from src.strategist import slots
 from src.strategist.plan import Plan, compose_plan
 from src.strategist import engage, voice
 
@@ -110,6 +111,16 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
     def plan_or_none():
         raw = db.get_current_plan()
         return Plan.from_dict(raw) if raw else None
+
+    def metrics_rows():
+        """The last import, or nothing. An unreadable file is no data, not a broken page."""
+        path = state_dir / "metrics-last.csv"
+        if not path.is_file():
+            return []
+        try:
+            return read_csv(path)
+        except ValueError:
+            return []
 
     def interview_view(answers=None, form=None):
         v = {
@@ -241,6 +252,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         return page(request, "today.html", today=d, plan=plan, answers=answers,
                     posted=bool(logged and logged[0]["done"]), day_iso=day.isoformat(),
                     attached=(logged[0].get("attach") if logged else None),
+                    slot_report=slots.report(metrics_rows()),
                     postables=postable_media(), note=note)
 
     @app.post("/today/attach", response_class=HTMLResponse)
@@ -307,13 +319,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             return page(request, "weekly.html", agenda=None, plan=None)
         end = date.today()
         start = end - timedelta(days=CADENCE_DAYS - 1)
-        rows = []
-        path = state_dir / "metrics-last.csv"
-        if path.is_file():
-            try:
-                rows = read_csv(path)
-            except ValueError:
-                rows = []
+        rows = metrics_rows()
         landed, weak = frames_landed(start, end)
         agenda = build_agenda(
             plan=plan, days=db.get_days(start.isoformat(), end.isoformat()), rows=rows,
@@ -359,13 +365,7 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         drafts = engage.plan(engage.parse(store["comments"]), profile)
         for d in drafts:
             d.replied = d.key in set(store["replied"])
-        rows = []
-        path = state_dir / "metrics-last.csv"
-        if path.is_file():
-            try:
-                rows = read_csv(path)
-            except ValueError:
-                rows = []
+        rows = metrics_rows()
         best = None
         if rows:
             top = max(rows, key=lambda r: r.follow_rate_per_1000)
@@ -479,9 +479,10 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
     def store_rows(rows) -> None:
         """Normalised to the app's own CSV so the apply step re-reads exactly what was read now."""
         state_dir.mkdir(exist_ok=True)
-        lines = ["post_ref,views,avg_watch_pct,follows_gained,hypothesis"]
+        lines = ["post_ref,views,avg_watch_pct,follows_gained,hypothesis,posted_at"]
         lines += [
-            f"{r.post_ref},{r.views},{r.avg_watch_pct},{r.follows_gained},{r.hypothesis}"
+            f"{r.post_ref},{r.views},{r.avg_watch_pct},{r.follows_gained},{r.hypothesis},"
+            f"{'' if r.posted_hour is None else r.posted_hour}"
             for r in rows
         ]
         (state_dir / "metrics-last.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")

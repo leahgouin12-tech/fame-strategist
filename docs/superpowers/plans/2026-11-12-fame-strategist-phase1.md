@@ -1764,5 +1764,18 @@ named then rather than left as a placeholder now.
   confidence and a rejection clause, and refuses hashtag lists, posting times and account actions
   in the text itself. It carries no URL, because the app has no browser to open one with.
 
-**Not built:** §5.7 scheduler and §5.9's two-currency spend tracker beyond the coach's cost
-card.
+- `src/strategist/slots.py` (spec §5.7): the scheduler starts on a default it admits to and then
+  stops guessing. `report()` reads the clock out of her own imported rows - `published_at` with a
+  time in it, a `posted_at`/`hour` column, or a trailing `18:40` on a quick-paste line - and stays
+  silent until `SLOT_FLOOR` (20, the spec's "roughly 20 posts") carry one. Above the floor it
+  ranks four coarse blocks by median views, drops any block under `BUCKET_FLOOR` (3) posts as
+  "not enough to average", and refuses the comparison outright when only one block is solid: that
+  is a schedule, not a result. The measured sentence carries its own confound - the hour travels
+  with the format, and an export cannot separate them - and the move it proposes is one test in
+  the weaker window, not a law. No vendor chart is quoted at any sample size, because the two
+  biggest published ones name opposite days for the same platform
+  (`myth-best-time-to-post-chart`). `read_quick` had a live bug found here: a reference like
+  `clip-0042` donated its digits as the view count, so numbers now come only from the tokens
+  after the reference.
+
+**Not built:** §5.9's two-currency spend tracker beyond the coach's cost card.

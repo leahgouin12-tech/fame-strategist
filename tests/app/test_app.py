@@ -552,3 +552,21 @@ def test_the_trends_page_states_its_own_limits(planned):
     body = planned.get("/trends").text
     assert "no browser" in body
     assert "posting time" in body
+
+
+def test_the_today_page_names_no_window_while_it_is_still_guessing(planned):
+    body = planned.get("/today").text
+    assert "window you can hold for three weeks" in body
+    assert "myth-best-time-to-post-chart" in body
+    assert "20 more posts with a clock time on it" in body
+
+
+def test_twenty_timed_posts_replace_the_default_with_her_own_windows(planned):
+    lines = [f"clip-{i:02d} {900 + i} 41 3 19:40" for i in range(10)]
+    lines += [f"clip-{i:02d}m {300 + i} 22 1 09:10" for i in range(10)]
+    planned.post("/numbers", data={"quick": "\n".join(lines)})
+    body = planned.get("/today").text
+    assert "Replaced at 20 timed posts" in body, "the hour has to survive the round trip"
+    assert "<th>Median views</th>" in body
+    assert "evening against morning" in body
+    assert "myth-best-time-to-post-chart" not in body, "the vendor refusal is the default, not the answer"
