@@ -1,0 +1,25 @@
+{
+  "name": "Fame Strategist",
+  "short_name": "Strategist",
+  "description": "A researched growth playbook, a photo and clip editor, and a plan that adapts to your own numbers. Runs on this machine, nothing hosted.",
+  "id": "fame-strategist",
+  "start_url": "/today",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#12121a",
+  "theme_color": "#12141a",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

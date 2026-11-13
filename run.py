@@ -3,15 +3,54 @@ because that is how a browser tab ends up showing "can't reach this page" on a h
 
 import copy
 import os
+import shutil
+import subprocess
 import threading
 import urllib.error
 import urllib.request
 import webbrowser
+from pathlib import Path
 
 from src.app import DATA_DIR, create_app
 
 PORT = 8756
 URL = f"http://127.0.0.1:{PORT}"
+WINDOW_SIZE = "1280,900"
+
+# Edge ships with Windows 10 and 11; Chrome is the other one worth looking for. Each entry
+# is (name on PATH, paths relative to a program folder).
+BROWSERS = [
+    ("msedge", ("Microsoft/Edge/Application/msedge.exe",)),
+    ("chrome", ("Google/Chrome/Application/chrome.exe",)),
+]
+
+
+def program_roots() -> list[Path]:
+    roots = [os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"),
+             os.environ.get("LOCALAPPDATA")]
+    return [Path(r) for r in roots if r and Path(r).is_dir()]
+
+
+def app_window(url: str) -> list[str] | None:
+    """A browser opened in app mode has no address bar, no tabs and its own taskbar
+    button - the closest thing to an installed application that needs no store, no
+    signing certificate and nothing exposed to the internet."""
+    for exe, leaves in BROWSERS:
+        found = shutil.which(exe)
+        candidates = [Path(found)] if found else []
+        candidates += [root / leaf for root in program_roots() for leaf in leaves]
+        for path in candidates:
+            if path.is_file():
+                return [str(path), f"--app={url}", f"--window-size={WINDOW_SIZE}"]
+    return None
+
+
+def open_in_browser(url: str) -> None:
+    command = app_window(url)
+    if command:
+        subprocess.Popen(command)
+        return
+    webbrowser.open(url)
 
 
 def live_instance() -> str:
@@ -26,10 +65,6 @@ def live_instance() -> str:
     except Exception:
         return ""
     return "app" if "Fame Strategist" in body else "other"
-
-
-def open_in_browser(url: str) -> None:
-    webbrowser.open(url)
 
 
 def serve() -> None:
@@ -66,6 +101,7 @@ def main() -> None:
     if os.environ.get("OPEN_WINDOW", "1") == "1":
         threading.Timer(1.2, lambda: open_in_browser(URL)).start()
     print(f"Fame Strategist is running on {URL}")
+    print("To keep it as an app with its own icon: browser menu > Apps > Install this site.")
     print("Nothing here is exposed to the internet. Close this window to stop the app.")
     print(f"Photos and clips are read from {DATA_DIR}\\inbox and {DATA_DIR}\\clips.")
     serve()

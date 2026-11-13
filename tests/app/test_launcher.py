@@ -42,6 +42,31 @@ def test_a_free_port_starts_the_server_and_tells_her_where_it_is(monkeypatch, qu
     assert str(launcher.DATA_DIR) in out, "the folder she has to drop files into is named up front"
 
 
+def test_it_opens_a_window_with_no_address_bar_when_a_chromium_browser_exists(tmp_path, monkeypatch):
+    """App mode is the difference between "a tab among my tabs" and a program with its
+    own taskbar button, which is what she asked for when she said she wanted an app."""
+    fake = tmp_path / "msedge.exe"
+    fake.write_bytes(b"")
+    monkeypatch.setattr(launcher.shutil, "which",
+                        lambda name: str(fake) if name == "msedge" else None)
+    launched = []
+    monkeypatch.setattr(launcher.subprocess, "Popen", launched.append)
+    launcher.open_in_browser(launcher.URL)
+    assert launched == [[str(fake), f"--app={launcher.URL}",
+                         f"--window-size={launcher.WINDOW_SIZE}"]]
+
+
+def test_a_machine_with_neither_browser_still_opens_the_default_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(launcher.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(launcher, "program_roots", lambda: [tmp_path])
+    launched = []
+    monkeypatch.setattr(launcher.subprocess, "Popen", launched.append)
+    opened = []
+    monkeypatch.setattr(launcher.webbrowser, "open", opened.append)
+    launcher.open_in_browser(launcher.URL)
+    assert launched == [] and opened == [launcher.URL]
+
+
 def test_the_probe_tells_a_live_app_from_a_stranger(monkeypatch):
     class Response:
         def __init__(self, body):

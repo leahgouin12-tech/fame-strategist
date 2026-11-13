@@ -46,6 +46,21 @@ def test_home_lists_the_loaded_evidence(client):
     assert "claims" in body and "engine: offline" in body
 
 
+def test_the_app_can_be_installed_rather_than_visited(client):
+    """An icon in the Start menu with its own window is what makes this a program to her,
+    and the manifest is the only thing standing between a URL and that."""
+    assert 'rel="manifest"' in client.get("/today").text
+    manifest = json.loads(client.get("/static/manifest.webmanifest").text)
+    assert manifest["display"] == "standalone"
+    assert manifest["start_url"] == "/today"
+    assert manifest["scope"] == "/"
+    for icon in manifest["icons"]:
+        got = client.get(icon["src"])
+        assert got.status_code == 200, f"{icon['src']} is declared but not there to fetch"
+        assert got.headers["content-type"].startswith("image/png")
+        assert got.content[:8] == b"\x89PNG\r\n\x1a\n", "a manifest icon has to be a real image"
+
+
 def test_the_interview_refuses_an_unusable_answer_and_saves_nothing(client):
     body = client.post("/interview", data={**COMPLETE, "hours_per_week": "1"}).text
     assert "hours_per_week must be at least 2" in body
