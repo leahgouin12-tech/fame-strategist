@@ -173,6 +173,12 @@ def local_copy(hypothesis: str, subject: str, day: date) -> tuple[str, str]:
 
 
 
+def subject_of(answers) -> str:
+    """The one specific detail the local writer is allowed to use, for callers outside
+    this module - the voice writer builds today's line in three platforms from it."""
+    return _subject(answers, "")
+
+
 @dataclass
 class Shot:
     desc: str

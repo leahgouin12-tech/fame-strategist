@@ -1706,7 +1706,27 @@ local (Pillow plus bundled ffmpeg) and the engine layer only sends text. When a 
 attaches an image to an outbound call, that is when the chokepoint has to exist, and it should be
 named then rather than left as a placeholder now.
 
-**Not built from Task 9:** `GET /weekly`. The plan named it and the spec's §5.11 depends on it;
-the route does not exist, and nothing pretends otherwise — `/plan` shows the week-by-week schedule
-and `/today` the day's shot list. Spec §10 now records the coach's cadence as fortnightly for
-whenever it is built, since credits are the scarce resource.
+**From Task 9, now built** — the two pages the plan's own summary had as the missing pieces:
+
+- `src/strategist/coach.py` + `templates/weekly.html` (spec §5.11, fortnightly per §10): the coach
+  reads the plan, the days marked posted, the frames that landed inside the window and the last
+  metrics import, then produces six receipts — coverage, top/bottom with the specific difference
+  between them, an audit of its own niche ranking against her numbers, stop/start/more moves taken
+  from the same `analyse()` the Numbers page uses, next week's slots, and the dated playbook
+  claims behind this week. Two honesty rules are load-bearing: below `GENERIC_UNDER` 25 posts it
+  calls itself generic instead of inventing an insight, and a rejection rate computed from fewer
+  than 3 frames is stated as a count, never a percentage. It brings proposals and applies nothing;
+  the only place a proposal can change the plan is `/numbers/apply`, which she presses.
+- `src/strategist/voice.py` + `templates/write.html` (spec §5.6): the voice profile is arithmetic
+  over samples she pasted — sentence-start casing (not total letters, which measures nothing),
+  words per sentence, question rate, first/second person, emoji rate, and her own hashtags, with
+  `#fyp`-class tags filtered out on the way in and again on the way out. `package()` emits
+  TikTok/Reels/X variants under different word and tag budgets so the same idea is rewritten
+  rather than copy-pasted, keeps the hook as the first line of the copy block, and always carries
+  the alt-text refusal. It makes no model call, so nothing she pastes can leave the machine.
+  Spec §5.6 says "alt text always"; the built app keeps §5.8's stance and refuses to write it,
+  because the judge measures light and steadiness and cannot know what is in the frame.
+
+**Not built:** §5.7 scheduler, §5.9 two-currency spend tracker beyond the coach's cost card,
+§5.10 trend research, §5.12 follower-graph diffing, §5.13 engagement drafting. The coach states
+plainly that no research has run instead of dressing up the playbook as a fresh find.

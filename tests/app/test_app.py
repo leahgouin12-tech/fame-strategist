@@ -412,3 +412,48 @@ def test_the_coach_shows_the_dated_sources_behind_the_current_slots(planned):
 def test_the_coach_costs_nothing_and_says_so(planned):
     body = planned.get("/weekly").text
     assert "0 model credits" in body and "all local CPU" in body
+
+
+SAMPLES = ("i did this thing today and it went badly lol #outfit\n\n"
+           "wait why is the lighting like this")
+
+
+def test_the_writer_learns_from_what_she_pasted_and_keeps_it(planned):
+    page = planned.post("/write/samples", data={"samples": SAMPLES}).text
+    assert planned.app.state.db.get_voice() == ["i did this thing today and it went badly lol #outfit",
+                                                "wait why is the lighting like this"]
+    assert "Learned from 2 things you actually wrote" in page
+    assert "i did this thing today" in page, "the box reopens with her own words"
+    assert "of sentences without a capital" in page, "the card quotes the measured habit"
+
+
+def test_the_writer_cuts_three_platforms_of_the_same_line_not_one_copy_pasted(planned):
+    planned.post("/write/samples", data={"samples": SAMPLES})
+    page = planned.get("/write").text
+    for platform in ("tiktok", "reels", "x"):
+        assert f'id="copy-{platform}"' in page and f'id="btn-{platform}"' in page
+
+
+def test_the_hook_is_the_first_line_of_what_she_copies(planned):
+    planned.post("/write/samples", data={"samples": SAMPLES})
+    page = planned.get("/write").text
+    shown = re.search(r'<p class="claim" style="font-size:19px">(.*?)</p>', page).group(1)
+    block = re.search(r'<textarea id="copy-tiktok" rows="4">(.*?)</textarea>', page, re.S).group(1)
+    assert block.startswith(shown), "a hook under the caption is a hook nobody hears"
+
+
+def test_the_writer_states_that_it_sent_nothing_anywhere(planned):
+    page = planned.get("/write").text
+    assert "no model\ncall" in page or "no model call" in page.replace("\n", " ")
+    assert "never uploaded" in page.lower()
+
+
+def test_the_writer_leaves_alt_text_to_the_person_who_took_the_shot(planned):
+    page = planned.get("/write").text
+    assert "Alt text is yours" in page
+
+
+def test_the_writer_still_learns_before_a_plan_exists(client):
+    client.post("/write/samples", data={"samples": SAMPLES})
+    page = client.get("/write").text
+    assert "No line to rewrite yet" in page and "2 samples" in page

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Writer &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Writer</h1>
+<p class="sub">Captions that read like you wrote them, because they are built from how you
+actually write. Paste a few things you have already posted or texted; the app measures them &mdash;
+sentence length, capitalisation, emoji, questions, the tags you already use &mdash; then cuts
+today&rsquo;s line for each platform. <strong>No sample is sent anywhere: this writer makes no model
+call.</strong></p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>Your voice</h3>
+  <form method="post" action="/write/samples">
+    <label>Things you actually wrote &mdash; one per blank line</label>
+    <textarea name="samples" rows="7"
+      placeholder="i did this thing today and it went badly lol #outfit&#10;&#10;wait why is the lighting like this">{{ samples_text }}</textarea>
+    <button type="submit">Learn from these</button>
+    <span class="k">Kept in this app&rsquo;s own file on this machine, never uploaded.
+      Clear the box and submit to go back to no voice profile.</span>
+  </form>
+  <ul class="assume">
+    {% for line in profile.signature() %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {% if profile.learned %}
+  <p class="k">Measured from {{ profile.samples }} samples just now. Paste more and every number
+    on this card moves.</p>
+  {% endif %}
+</div>
+
+{% if day %}
+<h2>Today&rsquo;s line, three ways</h2>
+<p class="k">The same idea as <a href="/today">today&rsquo;s slot</a>
+  ({{ day.hypothesis }} &middot; {{ day.format }}), rewritten per platform instead of
+  copy-pasted three times.</p>
+
+{% for v in variants %}
+<div class="card">
+  <div class="row"><span class="chip">{{ v.platform }}</span>
+    <h3 style="margin:0">{{ v.shape }}</h3></div>
+  <p class="claim" style="font-size:19px">{{ v.hook }}</p>
+  <p class="claim">{{ v.caption }}</p>
+  <p class="k">{% for t in v.tags %}<span class="chip">{{ t }}</span> {% endfor %}</p>
+  <label>What you copy</label>
+  <textarea id="copy-{{ v.platform }}" rows="4">{{ v.block }}</textarea>
+  <p><button type="button" id="btn-{{ v.platform }}">Copy this one</button>
+    <span class="k" id="note-{{ v.platform }}"></span></p>
+  <ul class="assume">{% for w in v.why %}<li>{{ w }}</li>{% endfor %}</ul>
+  <p class="limit">{{ v.alt_prompt }}</p>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3>What this writer will not do</h3>
+  <p class="claim">It will not pretend to be creative about you. Nothing here was invented from a
+    template of &ldquo;what girls in your niche say&rdquo; &mdash; the shape, the casing and the tags
+    all came back out of your own samples, and where you have given none the lines say so plainly.</p>
+  <p class="limit">If a line still reads flat, the fix is one of your own details, not a bigger
+    model. The hook is always the first line because a hook buried in a caption is a hook nobody
+    hears.</p>
+</div>
+
+<script>
+  {% for v in variants %}
+  document.getElementById("btn-{{ v.platform }}").addEventListener("click", async () => {
+    const box = document.getElementById("copy-{{ v.platform }}");
+    box.focus();
+    box.select();
+    try {
+      await navigator.clipboard.writeText(box.value);
+    } catch (e) {
+      document.execCommand("copy");
+    }
+    document.getElementById("note-{{ v.platform }}").textContent =
+      "Copied. If nothing landed, the block is selected - press Ctrl+C.";
+  });
+  {% endfor %}
+</script>
+{% else %}
+<div class="card">
+  <h3>No line to rewrite yet</h3>
+  <p class="claim">The writer works on a real day from your plan, so it stays silent until the
+    interview and the plan exist. Your voice profile is already saved and will be used the moment
+    there is something to write.</p>
+  <p><a class="btn" href="/interview">Interview</a>
+    <a class="btn ghost" href="/plan">Plan</a></p>
+</div>
+{% endif %}
+{% endblock %}

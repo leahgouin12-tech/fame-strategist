@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import io
 import json
+import re
 import shutil
 from urllib.parse import quote
 
@@ -25,10 +26,11 @@ from src.media.edit import PRESETS, SAVE_QUALITY, SLIDERS, edit_file, normalize
 from src.media.judge import IMAGE_SUFFIXES, inbox_files, judge, measure
 from src.playbook.store import Store
 from src.strategist.coach import CADENCE_DAYS, build_agenda
-from src.strategist.daily import build_day
+from src.strategist.daily import build_day, subject_of
 from src.strategist.interview import Interview, InterviewAnswers
 from src.strategist.niche import brief, rank, score_candidates
 from src.strategist.plan import Plan, compose_plan
+from src.strategist import voice
 
 ROOT = Path(__file__).resolve().parent.parent
 PLAYBOOK_DIR = ROOT / "data" / "playbook"
@@ -316,6 +318,35 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             landed=landed, weak=weak, entries=load_playbook()[0], today=end,
             engine_name=engine.name, offline=engine.name == "offline")
         return page(request, "weekly.html", agenda=agenda, plan=plan)
+
+    @app.get("/write", response_class=HTMLResponse)
+    def writer(request: Request, note: str = ""):
+        """Spec 5.6: the voice comes from what she pasted, never from a persona, and no
+        sample ever leaves this machine because the writer makes no call."""
+        answers, plan = db.get_interview(), plan_or_none()
+        samples = db.get_voice()
+        profile = voice.learn(samples)
+        pasted = "\n\n".join(samples)
+        if not answers or not plan or not Interview.complete(answers):
+            return page(request, "write.html", profile=profile, variants=[], day=None,
+                        samples_text=pasted,
+                        note=note or "The writer cuts today&rsquo;s line into three platforms. "
+                                     "It needs the interview and a plan before it has a line.")
+        day = build_day(plan, load_playbook()[0], answers, date.today(), engine)
+        variants = voice.package(subject_of(answers), day.hypothesis, date.today(), profile)
+        return page(request, "write.html", profile=profile, variants=variants, day=day,
+                    samples_text=pasted, note=note)
+
+    @app.post("/write/samples", response_class=HTMLResponse)
+    async def writer_samples(request: Request):
+        form = await request.form()
+        blocks = [b.strip() for b in re.split(r"\n\s*\n", str(form.get("samples", "") or ""))
+                  if b.strip()]
+        db.save_voice(blocks)
+        note = (f"Learned from {len(blocks)} thing{'s' if len(blocks) != 1 else ''} you "
+                "actually wrote." if blocks else
+                "Cleared. The writer is back to guessing, and it will say so on every line.")
+        return RedirectResponse(f"/write?note={quote(note)}", status_code=303)
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(request: Request, tier: str | None = None):

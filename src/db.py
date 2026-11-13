@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS days (
 CREATE TABLE IF NOT EXISTS metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT, posted_at TEXT, payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS voice (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS edit_chain (
     id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT NOT NULL, op TEXT NOT NULL,
     params TEXT NOT NULL, before_sha TEXT, after_sha TEXT, made_at TEXT NOT NULL
@@ -83,3 +86,13 @@ class DB:
     def mark_done(self, date: str) -> None:
         self.conn.execute("UPDATE days SET done = 1 WHERE date = ?", (date,))
         self.conn.commit()
+
+    def save_voice(self, samples: list[str]) -> None:
+        self.conn.execute("DELETE FROM voice")
+        if samples:
+            self.conn.execute("INSERT INTO voice VALUES (1, ?)", (json.dumps(samples),))
+        self.conn.commit()
+
+    def get_voice(self) -> list[str]:
+        row = self.conn.execute("SELECT payload FROM voice WHERE id = 1").fetchone()
+        return json.loads(row[0]) if row else []
