@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Coach &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>The coach</h1>
+<p class="sub">Every two weeks it reads what actually happened and brings you proposals.
+It does not post, send, reply, schedule or change anything &mdash;
+<a href="/numbers">applying a change to the plan is on the Numbers page</a>, and only when you press it.
+Nothing runs this by itself yet: there is no scheduler in this build, so you open it when you want
+the reading.</p>
+
+{% if agenda is none %}
+<div class="card">
+  <h3>Nothing to coach yet</h3>
+  <p class="claim">The coach only reads receipts &mdash; a plan, the days you mark posted, the frames
+  that landed, the numbers you import. With none of those it would have to invent an opinion,
+  and it will not do that to you.</p>
+  <p><a class="btn" href="/interview">Take the interview</a>
+    <a class="btn ghost" href="/plan">Open the plan</a></p>
+</div>
+{% else %}
+
+<div class="card">
+  <h3>Two weeks counted</h3>
+  <p class="k">{{ agenda.window }} &mdash; {{ agenda.cadence_days }} days, because a week would
+    mostly re-measure the same posts.</p>
+  <div class="row">
+    <div><span class="big">{{ agenda.coverage.posted }}</span>
+      <span class="k"> marked posted</span></div>
+    <div><span class="big">{{ agenda.coverage.planned }}</span>
+      <span class="k"> the plan asked for</span></div>
+    <div><span class="big">{{ agenda.coverage.landed|length }}</span>
+      <span class="k"> frames landed</span></div>
+    <div><span class="big">{{ agenda.coverage.weak|length }}</span>
+      <span class="k"> of those the judge called weak</span></div>
+  </div>
+  <p class="claim">{{ agenda.coverage.note }}</p>
+  {% if agenda.coverage.missed %}
+  <p class="k">Days with a slot and no post:
+    {% for d in agenda.coverage.missed %}<span class="chip">{{ d }}</span> {% endfor %}</p>
+  {% endif %}
+  {% if agenda.coverage.landed %}
+  <details>
+    <summary>The frames it looked at</summary>
+    <p class="k">{% for f in agenda.coverage.landed %}
+      <span class="chip {{ 'weak' if f in agenda.coverage.weak }}">{{ f }}</span> {% endfor %}</p>
+  </details>
+  {% endif %}
+</div>
+
+<h2>What performed</h2>
+{% if agenda.performance.posts %}
+<div class="card">
+  <table class="parts">
+    <tr><td>read</td><td>{{ agenda.performance.posts }} posts from your last import</td></tr>
+    {% if agenda.performance.top %}
+    <tr><td>best</td><td><strong>{{ agenda.performance.top.post_ref }}</strong> &mdash;
+      {{ agenda.performance.top.views }} views, {{ agenda.performance.top.watch }}% watched,
+      {{ agenda.performance.top.follows }} follows,
+      {{ agenda.performance.top.rate }} per 1000 views ({{ agenda.performance.top.hypothesis }})</td></tr>
+    {% endif %}
+    {% if agenda.performance.bottom %}
+    <tr><td>worst</td><td><strong>{{ agenda.performance.bottom.post_ref }}</strong> &mdash;
+      {{ agenda.performance.bottom.views }} views, {{ agenda.performance.bottom.watch }}% watched,
+      {{ agenda.performance.bottom.follows }} follows,
+      {{ agenda.performance.bottom.rate }} per 1000 views
+      ({{ agenda.performance.bottom.hypothesis }})</td></tr>
+    {% endif %}
+  </table>
+  {% if agenda.performance.gap %}<p class="claim">{{ agenda.performance.gap }}</p>{% endif %}
+  {% if agenda.performance.generic %}<p class="chip contested">generic</p>{% endif %}
+  <p class="limit">{{ agenda.performance.note }}</p>
+</div>
+{% else %}
+<div class="card">
+  <h3>No numbers read yet</h3>
+  <p class="claim">{{ agenda.performance.note }}</p>
+  <p><a class="btn" href="/numbers">Type three numbers per post</a></p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>Where the app&rsquo;s own call was wrong</h3>
+  <div class="row">
+    <span class="chip {{ 'proven' if agenda.self_check.agreed else ('contested' if agenda.self_check.agreed is false else 'folklore') }}">
+      {% if agenda.self_check.agreed is true %}it called it right{% elif agenda.self_check.agreed is false %}it called it wrong{% else %}unaudited{% endif %}</span>
+    <span class="k">ranked: {{ agenda.self_check.chosen or 'nothing yet' }}</span>
+    {% if agenda.self_check.best %}<span class="k">your numbers: {{ agenda.self_check.best }}</span>{% endif %}
+  </div>
+  <p class="claim">{{ agenda.self_check.note }}</p>
+</div>
+
+<h2>Stop, start, more</h2>
+{% for m in agenda.moves %}
+<div class="card">
+  <div class="row"><span class="chip {{ m.kind }}">{{ m.kind }}</span>
+    <h3 style="margin:0">{{ m.kind|capitalize }} &mdash; basis: {{ m.basis }}</h3></div>
+  <p class="claim">{{ m.text }}</p>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3>Next fortnight&rsquo;s slots</h3>
+  {% if agenda.next_week %}
+  <table class="parts">
+    <tr><td>week</td><td>{{ agenda.next_week.week_no }} of 8 &mdash; {{ agenda.next_week.goal }}</td></tr>
+    <tr><td>posts</td><td>{{ agenda.next_week.target_posts }}</td></tr>
+    <tr><td>test</td><td>{{ agenda.next_week.experiment }}</td></tr>
+    <tr><td>pass</td><td>{{ agenda.next_week.success_test }}</td></tr>
+  </table>
+  <p class="k">Suggested by the plan; changed only by you, on the Numbers page.</p>
+  {% else %}
+  <p class="claim">The plan ends here &mdash; there is no week after this one to fill.
+    Rebuild it or extend it; the coach will not invent a week the plan does not have.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>What it found, and when</h3>
+  <p class="limit">{{ agenda.research.note }}</p>
+  {% for e in agenda.research.used %}
+  <div class="row" style="margin-top:14px">
+    <span class="chip {{ e.confidence }}">{{ e.confidence }}</span>
+    <strong>{{ e.id }}</strong>
+    <span class="k">checked {{ e.as_of }}</span>
+  </div>
+  <p class="claim">{{ e.claim }}</p>
+  <p class="k">Sources:
+    {% for s in e.sources %}<a href="{{ s.url }}">{{ s.title }}</a> ({{ s.tier }}){% if not loop.last %} &middot; {% endif %}{% endfor %}</p>
+  <p class="limit">Does not claim: {{ e.does_not_claim }}</p>
+  {% endfor %}
+  {% if agenda.research.pending %}
+  <p class="chip folklore">unverified address: {{ agenda.research.pending|join(', ') }}</p>
+  {% endif %}
+  {% if agenda.research.stale %}
+  <p class="chip contested">out of date: {{ agenda.research.stale|join(', ') }}</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>What this cost</h3>
+  <table class="parts">
+    <tr><td>credits</td><td>{{ agenda.spend.credits }}</td></tr>
+    <tr><td>local work</td><td>{{ agenda.spend.local }}</td></tr>
+    <tr><td>next run</td><td>{{ agenda.spend.next_time }}</td></tr>
+  </table>
+</div>
+
+<h2>Proposals &mdash; yours to take or leave</h2>
+<div class="card">
+  <ol>
+    {% for p in agenda.proposals %}<li class="claim" style="margin-bottom:10px">{{ p }}</li>{% endfor %}
+  </ol>
+  <p class="limit">Nothing above has been applied to your plan, your files or your accounts.
+    That is the design: this app does all the preparation, and every decision stays yours.</p>
+</div>
+
+{% endif %}
+{% endblock %}

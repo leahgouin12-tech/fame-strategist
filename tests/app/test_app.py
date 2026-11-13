@@ -375,3 +375,40 @@ def test_the_picker_accepts_a_picture_and_lands_in_the_editor(tmp_path):
     assert client.get(landed.headers["location"]).status_code == 200
     refused = client.post("/photos/upload", files={"file": ("notes.txt", b"hello", "text/plain")})
     assert ".txt" in refused.text
+
+
+def test_the_coach_arrives_with_receipts_and_no_claims_to_have_acted(planned):
+    body = planned.get("/weekly").text
+    assert "Two weeks counted" in body and "Proposals" in body
+    assert "does not post, send, reply, schedule" in body
+    assert "Nothing above has been applied" in body
+
+
+def test_the_coach_needs_the_plan_before_it_opines(client):
+    assert "Nothing to coach yet" in client.get("/weekly").text
+
+
+def test_the_coach_counts_the_day_she_marked_posted(planned):
+    planned.post("/today/done", data={"on": date.today().isoformat()})
+    body = planned.get("/weekly").text
+    assert re.search(r'<span class="big">1</span>\s*<span class="k"> marked posted', body), \
+        "a day she posted has to reach the coach's count"
+
+
+def test_the_coach_reads_the_last_numbers_import(planned):
+    planned.post("/numbers", data={"quick": "a 1200 41 3\nb 900 12 1\n"})
+    body = planned.get("/weekly").text
+    assert "2 posts from your last import" in body
+    assert "a" in body and "generic" in body, "under 25 posts the coach says it is generic"
+    assert "No live trend research has run" in body
+
+
+def test_the_coach_shows_the_dated_sources_behind_the_current_slots(planned):
+    body = planned.get("/weekly").text
+    assert "checked 2026-" in body, "every claim the slots rest on carries its own date"
+    assert re.search(r'<a href="https://[^"]+">[^<]+</a> \(', body), "and where it was checked"
+
+
+def test_the_coach_costs_nothing_and_says_so(planned):
+    body = planned.get("/weekly").text
+    assert "0 model credits" in body and "all local CPU" in body

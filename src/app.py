@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import hashlib
 import io
@@ -24,6 +24,7 @@ from src.media.clean import fix
 from src.media.edit import PRESETS, SAVE_QUALITY, SLIDERS, edit_file, normalize
 from src.media.judge import IMAGE_SUFFIXES, inbox_files, judge, measure
 from src.playbook.store import Store
+from src.strategist.coach import CADENCE_DAYS, build_agenda
 from src.strategist.daily import build_day
 from src.strategist.interview import Interview, InterviewAnswers
 from src.strategist.niche import brief, rank, score_candidates
@@ -275,6 +276,46 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         db.save_day(on, payload)
         db.mark_done(on)
         return today(request, on=on)
+
+    def frames_landed(start: date, end: date):
+        """Frames that arrived inside the window, and the ones this app's own judge calls
+        weak. Scored here on this CPU, from the two folders the editor writes to."""
+        landed, weak = [], []
+        for folder, root in ((inbox_dir, ""), (edited_dir, "edited/")):
+            if not folder.is_dir():
+                continue
+            for p in sorted(folder.iterdir()):
+                if not p.is_file() or p.suffix.lower() not in IMAGE_SUFFIXES:
+                    continue
+                if not start <= date.fromtimestamp(p.stat().st_mtime) <= end:
+                    continue
+                landed.append(root + p.name)
+                reading = measure(p)
+                if not reading.error and judge_photo(p, reading).band == "weak":
+                    weak.append(root + p.name)
+        return landed, weak
+
+    @app.get("/weekly", response_class=HTMLResponse)
+    def weekly(request: Request):
+        """Spec 5.11. The coach reads receipts and brings proposals; it has no hands."""
+        plan = plan_or_none()
+        if plan is None:
+            return page(request, "weekly.html", agenda=None, plan=None)
+        end = date.today()
+        start = end - timedelta(days=CADENCE_DAYS - 1)
+        rows = []
+        path = state_dir / "metrics-last.csv"
+        if path.is_file():
+            try:
+                rows = read_csv(path)
+            except ValueError:
+                rows = []
+        landed, weak = frames_landed(start, end)
+        agenda = build_agenda(
+            plan=plan, days=db.get_days(start.isoformat(), end.isoformat()), rows=rows,
+            landed=landed, weak=weak, entries=load_playbook()[0], today=end,
+            engine_name=engine.name, offline=engine.name == "offline")
+        return page(request, "weekly.html", agenda=agenda, plan=plan)
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(request: Request, tier: str | None = None):
