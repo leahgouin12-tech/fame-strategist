@@ -1739,7 +1739,16 @@ named then rather than left as a placeholder now.
   target), continuation proposals built from her own measured best post, and a watch list whose
   accounts are hers because the app browses nothing. "Approve-and-tap" is literal — copy button,
   clipboard, and a local tick that marks her own list, not a platform action.
+- `src/metrics/churn.py` + `templates/graph.html` + the `graph` table (spec §5.12): follower
+  lists are pasted or uploaded from the platform's own export (Instagram *Download your
+  information*, TikTok *Download your data*) — the app has no login and browses nothing, so the
+  handles on disk arrived there because she put them there. `_diff()` compares only consecutive
+  snapshots and reports who stayed, who left and who arrived; a file that yields zero parseable
+  handles is reported as skipped, never as a mass departure, and the window narrative pairs the
+  loss with her posting ledger while saying out loud that the export never tells which post
+  anybody left over — a pairing, not a cause. The table is one row so the **Forget** button can
+  actually empty it: other people's handles are the most personal thing this app holds.
 
-**Not built:** §5.7 scheduler, §5.9 two-currency spend tracker beyond the coach's cost card,
-§5.10 trend research, §5.12 follower-graph diffing. The coach states
-plainly that no research has run instead of dressing up the playbook as a fresh find.
+**Not built:** §5.7 scheduler and §5.9's two-currency spend tracker beyond the coach's cost
+card, plus §5.10 trend research - the coach states plainly that no research has run instead of
+dressing up the playbook as a fresh find.

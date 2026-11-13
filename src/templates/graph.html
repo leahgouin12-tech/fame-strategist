@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Followers &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Followers</h1>
+<p class="sub">Both platforms will hand <em>you</em> your own follower and following lists &mdash;
+the official download-your-data export, no password to this app, no login, nothing scraped.
+Upload that file twice, weeks apart, and the difference is real churn: who left, between which
+dates, and what your own ledger says you were posting in that window.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>Where the file comes from</h3>
+  <ul class="assume">
+    <li><span class="chip">Instagram</span> Settings and privacy &rsaquo; Account ownership and
+      control &rsaquo; <strong>Download your information</strong> &rsaquo; select Followers and
+      Following &rsaquo; request a download. You get JSON files like
+      <code>followers_1.json</code>.</li>
+    <li><span class="chip">TikTok</span> Settings &rsaquo; Account &rsaquo; <strong>Download your
+      data</strong>. You get <code>following.json</code> and a followers file; the following list
+      also carries the date you followed each account.</li>
+    <li><span class="chip">Any platform</span> If you would rather not wait for the file, paste
+      the names &mdash; one per line &mdash; from the list on your screen.</li>
+  </ul>
+  <form method="post" action="/graph/read" enctype="multipart/form-data">
+    <label>The export file (followers or following)</label>
+    <input type="file" name="file" accept=".json,.txt,application/json,text/plain">
+    <label>&hellip;or paste the names, one per line</label>
+    <textarea name="paste" rows="4"
+      placeholder="noor_a&#10;sam.b&#10;lee">{{ paste|default('', true) }}</textarea>
+    <label>Date the list is from</label>
+    <input type="date" name="taken" value="{{ today }}">
+    <button type="submit">Read this snapshot</button>
+    <span class="k">The file is read on this machine and only the handles go into this
+      app&rsquo;s own database. Uploading the same list twice is not a bug: the second one is
+      what makes a diff.</span>
+  </form>
+  {% if stored %}
+  <form method="post" action="/graph/forget" onsubmit="return confirm('Delete every handle this app has read?')">
+    <button type="submit" class="ghost">Forget all the lists</button>
+    <span class="k">One click removes them from disk. These are other people&rsquo;s usernames,
+      so they are the most sensitive thing this app holds.</span>
+  </form>
+  {% endif %}
+</div>
+
+<p class="claim">{{ report.note }}</p>
+
+{% if report.diffs %}
+<h2>What changed between snapshots</h2>
+{% for d in report.diffs %}
+<div class="card">
+  <div class="row">
+    <span class="chip proven">{{ d.kept }} stayed</span>
+    <span class="chip contested">{{ d.lost | length }} left</span>
+    <span class="chip">{{ d.gained | length }} arrived</span>
+  </div>
+  <p class="k">{{ d.from }} &rarr; {{ d.to }}</p>
+
+  {% if d.lost %}
+  <p><strong>Left:</strong>
+    {% for n in d.lost[:12] %}<span class="chip contested">{{ n }}</span> {% endfor %}
+    {% if d.lost | length > 12 %}<span class="k">+{{ d.lost | length - 12 }} more names in
+      the database, not on this screen</span>{% endif %}</p>
+  {% endif %}
+  {% if d.gained %}
+  <p><strong>Arrived:</strong>
+    {% for n in d.gained[:12] %}<span class="chip">{{ n }}</span> {% endfor %}
+    {% if d.gained | length > 12 %}<span class="k">+{{ d.gained | length - 12 }} more</span>
+    {% endif %}</p>
+  {% endif %}
+  {% if not d.lost and not d.gained %}
+  <p class="claim">Nobody came or went between these two exports. That is a real result, not an
+    empty one &mdash; it means the window below has nothing to explain.</p>
+  {% endif %}
+
+  <p class="claim">{{ d.window.note }}</p>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if stored %}
+<h2>What is on disk</h2>
+<div class="card">
+  <table class="tbl">
+    <tr><th>Snapshot</th><th>From</th><th>Names</th><th>With dates</th></tr>
+    {% for s in report.snapshots %}
+    <tr><td>{{ s.taken }}</td><td>{{ s.source }}</td><td>{{ s.names }}</td>
+      <td>{{ s.added }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="k">The follower list is capped at the 12 most recent snapshots on purpose: two weeks
+    of churn history is what the question needs, and an archive of handles is what this app should
+    not be.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>The boundary</h3>
+  <p class="claim">{{ report.stance }}</p>
+  <p class="limit">The honest limit, stated once: no export contains the reason anybody left. The
+    platform could not know which of your posts a stranger read before they went, so this page
+    pairs churn with your calendar and stops there. Reading it is your part.</p>
+</div>
+{% endblock %}

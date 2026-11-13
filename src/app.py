@@ -18,6 +18,7 @@ from src.db import DB
 from src.engines.offline import OfflineEngine
 from src.media import clip as clipmod
 from src.media.clipjudge import CLIP_LABELS, CLIP_WEIGHTS, judge_clip, suggest
+from src.metrics import churn
 from src.metrics.adapt import DATA_FLOOR, analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
@@ -404,6 +405,45 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         store["replied"] = sorted(marked)
         db.save_engage(store)
         return RedirectResponse("/engage", status_code=303)
+
+    @app.get("/graph", response_class=HTMLResponse)
+    def graph(request: Request, note: str = ""):
+        """Spec 5.12. Two official exports, one honest diff: who left, between which dates,
+        and what the ledger says she was posting in that window. Insight, never action."""
+        stored = db.get_graph()
+        snaps = [churn.Snapshot(taken=s["taken"], source=s["source"], names=tuple(s["names"]),
+                                added=s.get("added", {})) for s in stored]
+        report = churn.churn_report(snaps, db.get_days("0001-01-01", "9999-12-31"))
+        return page(request, "graph.html", report=report, stored=stored,
+                    today=date.today().isoformat(), note=note)
+
+    @app.post("/graph/read", response_class=HTMLResponse)
+    async def graph_read(request: Request):
+        form = await request.form()
+        taken = iso_or_today(str(form.get("taken", "") or ""))
+        source = str(form.get("source", "") or "pasted")[:40]
+        upload = form.get("file")
+        text = str(form.get("paste", "") or "")
+        # Duck-typed on purpose: a multipart field comes back as Starlette's own UploadFile,
+        # which is not an instance of the subclass FastAPI exports.
+        if getattr(upload, "filename", ""):
+            source = upload.filename.replace("\\", "/").rsplit("/", 1)[-1][:40]
+            text = (await upload.read()).decode("utf-8", "replace")
+        snap = churn.parse_export(text, taken=taken, source=source)
+        if snap.error:
+            return RedirectResponse(f"/graph?note={quote(snap.error)}", status_code=303)
+        stored = db.get_graph() + [{"taken": snap.taken, "source": snap.source,
+                                    "names": list(snap.names), "added": snap.added}]
+        db.save_graph(stored[-12:])
+        note = (f"{len(snap.names)} names read from {source} as the {taken} snapshot. "
+                "Nothing was fetched and no account was touched.")
+        return RedirectResponse(f"/graph?note={quote(note)}", status_code=303)
+
+    @app.post("/graph/forget", response_class=HTMLResponse)
+    def graph_forget():
+        db.save_graph([])
+        cleared = "Every handle forgotten. The diff is empty until you upload an export again."
+        return RedirectResponse(f"/graph?note={quote(cleared)}", status_code=303)
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources(request: Request, tier: str | None = None):

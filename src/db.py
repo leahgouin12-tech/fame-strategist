@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS voice (
 CREATE TABLE IF NOT EXISTS engage (
     id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS graph (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS edit_chain (
     id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT NOT NULL, op TEXT NOT NULL,
     params TEXT NOT NULL, before_sha TEXT, after_sha TEXT, made_at TEXT NOT NULL
@@ -109,3 +112,14 @@ class DB:
         row = self.conn.execute("SELECT payload FROM engage WHERE id = 1").fetchone()
         base = {"comments": "", "targets": "", "bio": "", "replied": []}
         return {**base, **json.loads(row[0])} if row else base
+
+    def save_graph(self, snapshots: list[dict]) -> None:
+        """Other people's handles, so the whole table is one row that one button can empty."""
+        self.conn.execute("DELETE FROM graph")
+        if snapshots:
+            self.conn.execute("INSERT INTO graph VALUES (1, ?)", (json.dumps(snapshots),))
+        self.conn.commit()
+
+    def get_graph(self) -> list[dict]:
+        row = self.conn.execute("SELECT payload FROM graph WHERE id = 1").fetchone()
+        return json.loads(row[0]) if row else []
