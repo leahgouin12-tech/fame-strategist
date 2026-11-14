@@ -23,7 +23,7 @@ SRC = ROOT / "src"
 TESTS = ROOT / "tests"
 
 DEPARTMENTS = ("Research", "Strategy", "Creation", "Editing", "Repurposing", "Publishing",
-               "Analytics", "Experimentation", "Community", "Monetization", "Workflow",
+               "Analytics", "Experimentation", "Community", "Monetization", "SEO", "Workflow",
                "Interface", "This machine")
 
 # Which department a thing belongs to is decided by the words in what it is called, not by a
@@ -33,6 +33,9 @@ DEPT_BY_WORD = (
     # and those words sit further down this list.
     ("money", "Monetization"), ("monetiz", "Monetization"), ("sponsor", "Monetization"),
     ("disclos", "Monetization"), ("paid post", "Monetization"),
+    # Ahead of the rest for the same reason: the SEO module talks about captions, sources,
+    # numbers and plans, and every one of those words is lower down this list.
+    ("seo", "SEO"), ("discoverab", "SEO"),
     ("repurpos", "Repurposing"),
     ("bench", "Analytics"), ("number", "Analytics"), ("metric", "Analytics"),
     ("spend", "Analytics"), ("weekly", "Analytics"), ("adapt", "Analytics"),

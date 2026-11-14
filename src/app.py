@@ -56,6 +56,7 @@ from src.metrics import spend as spendmod
 from src.metrics import bench as benchmod
 from src.money import rate as money
 from src.registry import audit as regaudit
+from src.seo import text as seo
 from src.metrics.adapt import DATA_FLOOR, analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
@@ -912,6 +913,58 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         """Caption tones and the tag list, both built only out of what she typed and what her
         own numbers already say."""
         return captions_view(request, subject, platform, media, note)
+
+    def seo_view(request, text="", alt="", platform="", note=""):
+        """One post read against the only phrases this app can account for.
+
+        The post defaults to the one the composer has staged, so this is a check on the real
+        thing rather than a second box to write captions in - and the phrase list is built from
+        her own imports, her own pasted captions and her own plan, so the page never has to
+        borrow a keyword figure from a tool it cannot reach.
+        """
+        rows = metrics_rows()
+        samples = db.get_voice()
+        plan = plan_or_none()
+        week = _week_at(plan, date.today()) if plan else None
+        found = seo.terms(rows, samples, plan, week)
+        staged = db.get_staged()
+        cap, tags = seo.split(text)
+        where = "the text you pasted"
+        alt = (alt or "").strip() or (staged.get("alt") or "")
+        platform = accounts.platform_id(platform or staged.get("platform") or "instagram")
+        if not cap and not tags:
+            cap = (staged.get("caption") or "").strip()
+            tags = [t for t in (staged.get("hashtags") or []) if t]
+            if cap or tags:
+                where = "the post staged in the composer"
+        shape = accounts.caption_key(platform)
+        got = seo.audit(caption=cap, hashtags=tags, alt=alt, found=found, platform=platform,
+                        shape=shape)
+        rule = voice.PLATFORM_RULES.get(shape, voice.PLATFORM_RULES["reels"])
+        return page(request, "seo.html", note=note, text=text, alt=alt, platform=platform,
+                    places=accounts.PLATFORMS, stage=cap, tags=tags, from_where=where,
+                    terms=found, carried=got["carried"], missed=got["missed"],
+                    findings=got["findings"], front=got["front"], late=got["late"],
+                    tag_only=got["tagOnly"], spent=got["spent"], head=got["head"],
+                    cannot=got["cannot"], rules=seo.rules(load_playbook()[0]),
+                    why_short=seo.gaps(rows, samples, plan), week=week,
+                    fold=seo.FRONT, limit=caption_tags.limit_for(platform), budget=rule["words"],
+                    n_samples=len(samples), n_rows=len(rows), staged=staged)
+
+    @app.get("/seo", response_class=HTMLResponse)
+    def seo_page(request: Request, text: str = "", alt: str = "", platform: str = "",
+                 note: str = ""):
+        """Discoverability, from the text on this machine: the phrases a search could land on,
+        whether this post carries them, and where in the caption they sit."""
+        return seo_view(request, text, alt, platform, note)
+
+    @app.post("/seo/read", response_class=HTMLResponse)
+    async def seo_read(request: Request):
+        """Read the post in front of her. Nothing is saved here - the audit changes nothing about
+        the staged package, so the button can be pressed as often as she likes."""
+        form = await request.form()
+        got = {key: str(form.get(key, "") or "") for key in ("text", "alt", "platform")}
+        return seo_view(request, got["text"], got["alt"], got["platform"])
 
     def repurpose_view(request, passed=None, note=""):
         """The page in either state: what it would rebuild, or what it did. The candidate list

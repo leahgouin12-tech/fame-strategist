@@ -33,6 +33,7 @@ from src.metrics.adapt import DATA_FLOOR, analyse
 from src.metrics.adapt import apply as apply_adapt
 from src.metrics.ingest import read_quick
 from src.money import rate as money
+from src.seo import text as seo
 from src.playbook import research
 from src.strategist import engage, slots, voice
 from src.strategist.coach import CADENCE_DAYS, _week_at, build_agenda
@@ -543,6 +544,50 @@ def tags_pick(kit, subject: str = "", platform: str = "", limit: int = 0):
         block=tag_tool.block(place, got), where="/captions")
 
 
+# ---- discoverability --------------------------------------------------------
+
+def seo_read(kit, text: str = "", platform: str = ""):
+    """Read one post for the words a search could land on, and say what cannot be seen.
+
+    The phrases are hers and only hers - the hypothesis her imported posts ran under, the words
+    that repeat in the captions she pasted, the week her plan is running. The post is the text
+    given, or the one the composer is holding. No search volume, rank or index status is ever
+    returned, because nothing on this machine can produce one honestly; the limits come back in
+    the payload instead of being left implied.
+    """
+    rows, samples, plan = kit.rows(), kit.db.get_voice(), kit.plan()
+    week = _week_at(plan, date.today()) if plan else None
+    found = seo.terms(rows, samples, plan, week)
+    staged = kit.db.get_staged()
+    alt = (staged.get("alt") or "").strip()
+    cap, tags = seo.split(text)
+    checked = "the text you gave"
+    if not cap and not tags:
+        cap = (staged.get("caption") or "").strip()
+        tags = [t for t in (staged.get("hashtags") or []) if t]
+        if cap or tags:
+            checked = "the post staged in the composer"
+    if not cap and not tags and not alt:
+        return skipped("no post to read: nothing was pasted, the composer holds no staged "
+                       "caption and there is no alt field either.")
+    place = _caption_platform(kit, platform)
+    got = seo.audit(caption=cap, hashtags=tags, alt=alt, found=found, platform=place,
+                    shape=accounts.caption_key(place))
+    held = [f["check"] for f in got["findings"] if f["verdict"] in ("missing", "weak",
+                                                                    "unreadable")]
+    return advised(
+        f"Read {checked} against the {len(found)} phrase{'' if len(found) == 1 else 's'} this "
+        f"app can account for: {len(got['carried'])} on it, {len(got['missed'])} not, "
+        f"{len(got['front'])} in front of the fold. "
+        + (f"{len(held)} check{'' if len(held) == 1 else 's'} came back short: "
+           + ", ".join(held) + "." if held else "Nothing the app can check came back short."),
+        checks=got["findings"], terms=[t.as_dict() for t in found], carried=got["carried"],
+        missed=got["missed"], front=got["front"], late=got["late"], tag_only=got["tagOnly"],
+        spent=got["spent"], alt=alt, platform=place, fold=seo.FRONT,
+        rules=seo.rules(kit.entries()), why_short=seo.gaps(rows, samples, plan),
+        cannot=seo.CANNOT, checked_from=checked, where="/seo")
+
+
 # ---- community & queue ------------------------------------------------------
 
 def reply_drafts(kit):
@@ -723,7 +768,14 @@ add("copy.tags", "Pick the caption tags this app can name", "Make", "make",
     describe="The tags that go under the caption, each with the evidence that put it there - "
              "her posts, her writing, her words for the shot, or the week's format. A tag nobody "
              "can point at is not shown.")(tags_pick)
-add("community.drafts", "Draft the replies", "Make", "queue",    describe="Writes replies to the comments she pasted in and refuses the ones needing a "
+add("seo.audit", "Read the post for what a search could land on", "SEO", "analyse",
+    args=("text", "platform"),
+    describe="Which phrases this app can account for are actually on the post, whether they sit "
+             "in front of the fold or only inside a tag, what the alt field carries and which tag "
+             "slots restate the caption. Search volume, rank and index status are reported as "
+             "unknowable rather than guessed.")(seo_read)
+add("community.drafts", "Draft the replies", "Make", "queue",
+    describe="Writes replies to the comments she pasted in and refuses the ones needing a "
              "fact only she has. Nothing is sent.")(reply_drafts)
 add("queue.stage", "Stage a day for posting", "Brief", "queue", needs=("plan", "answers"),
     args=("on",),

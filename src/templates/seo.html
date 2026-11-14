@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Found &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Being found</h1>
+<p class="sub">Two questions, answered from files already on this machine: which words a search
+could land on for you, and whether the post in front of you actually says them &mdash; and in the
+caption or only in a tag. Every phrase on the page comes with the thing that put it there.</p>
+<p class="k">This is not a keyword tool and cannot be one. No platform tells an app with no server
+and no login what a phrase is searched for or where her post sits for it, so nothing here shows a
+volume figure, a rank or a competitor&rsquo;s text. A number of that kind would be an estimate of
+queries nobody ran; the list at the bottom of this page names exactly what is absent instead of
+leaving it implied.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>The post being read</h3>
+  <form method="post" action="/seo/read">
+    <label for="text">Caption, tags and all
+      <textarea id="text" name="text" rows="4" placeholder="{{ 'Nothing is staged in the composer, so paste the caption here.' }}">{{ stage }}{% if stage and tags %}
+
+{{ tags | join(' ') }}{% endif %}</textarea>
+    </label>
+    <div class="grid">
+      <div>
+        <label for="alt">Alt field</label>
+        <input type="text" id="alt" name="alt" value="{{ alt }}" style="width:100%"
+               placeholder="one sentence about what is in the frame">
+      </div>
+      <div>
+        <label for="platform">Where it goes</label>
+        <select id="platform" name="platform">
+          {% for p in places %}
+          <option value="{{ p.id }}" {% if p.id == platform %}selected{% endif %}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Read it</button>
+      </div>
+    </div>
+  </form>
+  <p class="k tiny">Read from {{ from_where }}. Pressing this changes nothing &mdash; the staged
+    post stays exactly as it is.</p>
+  {% if tags %}
+  <p class="chipset row">{% for t in tags %}<span class="chip">{{ t }}</span>{% endfor %}</p>
+  {% endif %}
+  {% if head %}
+  <p class="k">Behind the fold as this app reads it, the first {{ fold }} characters hold:
+    <strong>{{ head }}</strong></p>
+  {% else %}
+  <p class="k">There is no caption text, so there is nothing in front of any fold.</p>
+  {% endif %}
+</div>
+
+<h2>What the post does and does not carry</h2>
+<div class="card">
+  <table class="tbl">
+    <tr><th>the check</th><th>verdict</th><th>what it found, and the smallest fix</th></tr>
+    {% for f in findings %}
+    <tr>
+      <td>{{ f.check }}</td>
+      <td><span class="chip {{ 'post' if f.verdict == 'carried' else ('fix' if f.verdict == 'weak' else 'skip') }}">{{ f.verdict }}</span></td>
+      <td>{{ f.line }}{% if f.fix %}<br><em>Fix: {{ f.fix }}</em>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if front or late or tag_only %}
+  <p class="k tiny">The three positions are different problems, so the page keeps them apart:
+    <strong>{{ front | length }}</strong> phrase{{ '' if front | length == 1 else 's' }} in front of
+    the fold, <strong>{{ late | length }}</strong> written in the caption but behind it,
+    <strong>{{ tag_only | length }}</strong> only in a tag and never said in the sentence.</p>
+  {% endif %}
+</div>
+
+<h2>The phrases, and what put each one here</h2>
+<div class="card">
+  {% if terms %}
+  <table class="tbl">
+    <tr><th>phrase</th><th>source</th><th>the evidence</th><th>on this post</th></tr>
+    {% for t in terms %}
+    <tr>
+      <td>{{ t.phrase }}</td>
+      <td>{{ t.source }}</td>
+      <td class="k tiny">{{ t.evidence }}</td>
+      <td>
+        {% for c in carried %}{% if c.phrase == t.phrase %}
+        <span class="chip post">{{ c.where }}</span>
+        {% endif %}{% endfor %}
+        {% for m in missed %}{% if m.phrase == t.phrase %}
+        <span class="chip skip">not on it</span>
+        {% endif %}{% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k tiny">Sources are only ever your own: <strong>your posts</strong> means the
+    hypothesis an imported post ran under, <strong>your captions</strong> means a word that
+    appears in two or more of the {{ n_samples }} captions you pasted on the
+    <a href="/write">Writer</a>, and <strong>your plan</strong> means the hypothesis this week is
+    running and the niche the <a href="/plan">eight weeks</a> were built on. The
+    {{ n_rows }} imported post{{ '' if n_rows == 1 else 's' }}
+    are the whole of what this page knows about your numbers.</p>
+  {% else %}
+  <p class="big">There is no phrase to check against yet.</p>
+  <p class="k">Every phrase on this page is one you can point at, and all three places they
+    come from are empty: <a href="/numbers">the numbers of the posts you have imported</a>, the
+    captions pasted on the <a href="/write">Writer</a>, and the week the
+    <a href="/plan">plan</a> is running. Fill any one of the three and the checks below have
+    something real to read against. An app that cannot reach a keyword tool would have to invent
+    words to show here, so it shows none.</p>
+  {% endif %}
+</div>
+
+<h2>Where the tag slots go</h2>
+<div class="card">
+  <p class="k">{{ limit }} is what this app reads as the most a {{ platform }} post carries before
+    the tag line looks like a wall, and {{ budget }} words is what it reads a caption as holding.
+    Both are this app&rsquo;s own reading of the formats &mdash; neither platform prints the number
+    it uses.</p>
+  {% if spent %}
+  <table class="tbl">
+    <tr><th>tag</th><th>what that slot is doing</th></tr>
+    {% for s in spent %}
+    <tr><td>{{ s.tag }}</td><td class="k">{{ s.why }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="k">Nothing spent: every tag on the post either adds a word the caption does not say,
+    or there is no tag at all.</p>
+  {% endif %}
+</div>
+
+{% if rules %}
+<h2>What the sourced library says about text</h2>
+{% for r in rules %}
+<div class="card">
+  <div class="row">
+    <span class="chip {{ 'post' if r.confidence == 'proven' else 'fix' }}">{{ r.confidence }}</span>
+    <span class="k">{{ r.tier }}{% if r.where %} &middot; <a href="{{ r.where }}">{{ r.source }}</a>{% endif %}</span>
+  </div>
+  <p class="claim">{{ r.claim }}</p>
+  <p class="k">{{ r.mechanism }}</p>
+  <p class="limit"><strong>Does not claim:</strong> {{ r.does_not_claim }}</p>
+</div>
+{% endfor %}
+<p class="k tiny">Stale entries and folklore are dropped rather than quoted, which is why this
+  section is sometimes short and sometimes absent.</p>
+{% endif %}
+
+{% if why_short %}
+<h2>Why the list is this long</h2>
+<div class="card">
+  <ul class="k">{% for g in why_short %}<li>{{ g }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<h2>What this page cannot know</h2>
+<div class="card">
+  <ul class="k">{% for c in cannot %}<li>{{ c }}</li>{% endfor %}</ul>
+  <p class="k tiny">Say &ldquo;check whether my post is searchable&rdquo; to the
+    <a href="/agent">Agent</a> and it will answer with these limits rather than a verdict it
+    cannot support.</p>
+</div>
+{% endblock %}

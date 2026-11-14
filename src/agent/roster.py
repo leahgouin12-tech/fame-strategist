@@ -65,6 +65,12 @@ DESKS = (
          ("copy.packs", "copy.tone", "copy.tags", "community.drafts"),
          ("caption", "hook", "write", "copy", "reply", "replies", "comment", "what do i say",
           "wording", "tone", "cunty", "funny", "aesthetic", "selfie", "hashtag")),
+    Desk("seo", "The Signpost",
+         "Reads a post for the words a search could land on - only the ones her own posts, "
+         "captions and plan can account for, and never a volume figure it cannot check.",
+         ("seo.audit",),
+         ("seo", "search", "searchable", "discover", "keyword", "alt text", "alt", "indexed",
+          "index", "findable", "get found", "rank", "who is finding this")),
     Desk("metrics", "The Analyst",
          "Reads the numbers she typed, names a window from her own history and proposes the "
          "adjustment.",
