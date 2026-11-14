@@ -6,7 +6,7 @@ mark_done, save_score beside the rubric weights, log_edit and edit_ops for the c
 that answers "was this generated", start_run and add_step and redid_step for the agent,
 remember and recall and forget for the notes, and the feature and upgrade rows, which
 are replaced whole on every re-read. Most of it is deliberately one row - interview,
-voice, engage, graph, rubric, spend, grants, accounts and staged all carry CHECK (id = 1)
+voice, engage, graph, rubric, spend, grants, accounts, terms and staged all carry CHECK (id = 1)
 and are deleted before they are inserted, because those are settings she set rather than
 a history to page through; bench appends instead, since a benchmark is a list.
 
@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS staged (
 );
 CREATE TABLE IF NOT EXISTS bench (
     id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL, made_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS terms (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS feature (
     key TEXT PRIMARY KEY, payload TEXT NOT NULL, dept TEXT NOT NULL, kind TEXT NOT NULL,
@@ -426,6 +429,21 @@ class DB:
 
     def clear_bench(self) -> None:
         self.conn.execute("DELETE FROM bench")
+        self.conn.commit()
+
+    TERMS_DEFAULT = {"hourly": 0, "minutes": 0}
+
+    def get_terms(self) -> dict:
+        """The two numbers the money page cannot guess: what an hour of her time is worth to
+        her, and how long a finished post actually takes. Blank is 0, and 0 means the app
+        refuses to state a floor rather than adopting a wage."""
+        row = self.conn.execute("SELECT payload FROM terms WHERE id = 1").fetchone()
+        return {**self.TERMS_DEFAULT, **json.loads(row[0])} if row else dict(self.TERMS_DEFAULT)
+
+    def save_terms(self, data: dict) -> None:
+        self.conn.execute("DELETE FROM terms")
+        self.conn.execute("INSERT INTO terms VALUES (1, ?)",
+                          (json.dumps({**self.TERMS_DEFAULT, **data}),))
         self.conn.commit()
 
     def save_registry(self, features, upgrades, found_at) -> None:

@@ -23,12 +23,16 @@ SRC = ROOT / "src"
 TESTS = ROOT / "tests"
 
 DEPARTMENTS = ("Research", "Strategy", "Creation", "Editing", "Repurposing", "Publishing",
-               "Analytics", "Experimentation", "Community", "Workflow", "Interface",
-               "This machine")
+               "Analytics", "Experimentation", "Community", "Monetization", "Workflow",
+               "Interface", "This machine")
 
 # Which department a thing belongs to is decided by the words in what it is called, not by a
 # table of names that goes stale the first time a route is added.
 DEPT_BY_WORD = (
+    # First, because "money.label" is about a caption that also mentions staging and accounts,
+    # and those words sit further down this list.
+    ("money", "Monetization"), ("monetiz", "Monetization"), ("sponsor", "Monetization"),
+    ("disclos", "Monetization"), ("paid post", "Monetization"),
     ("repurpos", "Repurposing"),
     ("bench", "Analytics"), ("number", "Analytics"), ("metric", "Analytics"),
     ("spend", "Analytics"), ("weekly", "Analytics"), ("adapt", "Analytics"),

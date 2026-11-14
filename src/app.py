@@ -52,6 +52,7 @@ from src.metrics import churn
 from src.metrics import correlate
 from src.metrics import spend as spendmod
 from src.metrics import bench as benchmod
+from src.money import rate as money
 from src.registry import audit as regaudit
 from src.metrics.adapt import DATA_FLOOR, analyse, apply
 from src.metrics.ingest import read_csv, read_quick
@@ -620,11 +621,14 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                     counts=counts, tier=tier)
 
     def store_rows(rows) -> None:
-        """Normalised to the app's own CSV so the apply step re-reads exactly what was read now."""
+        """Normalised to the app's own CSV so the apply step re-reads exactly what was read now.
+        The platform column rides along: an import that named its platforms and then went
+        through a re-save must not come back as one anonymous median."""
         state_dir.mkdir(exist_ok=True)
-        lines = ["post_ref,views,avg_watch_pct,follows_gained,hypothesis,posted_at"]
+        lines = ["platform,post_ref,views,avg_watch_pct,follows_gained,hypothesis,posted_at"]
         lines += [
-            f"{r.post_ref},{r.views},{r.avg_watch_pct},{r.follows_gained},{r.hypothesis},"
+            f"{getattr(r, 'platform', '') or ''},{r.post_ref},{r.views},{r.avg_watch_pct},"
+            f"{r.follows_gained},{r.hypothesis},"
             f"{'' if r.posted_hour is None else r.posted_hour}"
             for r in rows
         ]
@@ -788,6 +792,86 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         return lab_page(request, note=(
             f"Remembered: kept {got.winner}, dropped {got.loser}. The next plan this app builds "
             f"will not give {got.loser} a week."))
+
+    def money_view(request, note="", checked=None, asked_text="", where=""):
+        """The bookkeeping page, rebuilt from the three sources every number on it names.
+
+        The median comes from the metrics import, the band from a dated playbook claim, the floor
+        from two numbers she typed. A fourth thing is on the page and is not money: the label
+        check, which reads a caption and stops short of claiming to see the crop or hear the
+        audio. Nothing here is in touch with a brand, and the page says so where the numbers are
+        friendly enough to be mistaken for an agreement.
+        """
+        terms = db.get_terms()
+        rows = metrics_rows()
+        entries, _ = load_playbook()
+        made, thin, uncited = money.quotes(rows, entries, terms["hourly"], terms["minutes"])
+        top = max(made, key=lambda q: q.anchor) if made else None
+        priced = money.priceable(rows)
+        cited = {e.id: e for e in entries if e.id.startswith("money-")}
+        staged = db.get_staged()
+        if checked is None and not asked_text and staged.get("caption"):
+            asked_text = staged["caption"]
+            where = "the post staged in the composer"
+            surface = staged.get("surface") or staged.get("platform") or ""
+            checked = money.check_disclosure(asked_text, surface)
+        return page(request, "money.html", note=note, terms=terms, quotes=made, thin=thin,
+                    uncited=uncited, top=top, priced=priced, cited=cited, staged=staged,
+                    addons=money.addon_lines(top.anchor if top else 0), check=checked,
+                    check_text=asked_text, check_from=where, fold=money.FOLD_CHARS,
+                    unit=money.UNIT, least=money.MIN_POSTS,
+                    video=money.VIDEO_SURFACES, named=money.NAMED_TERMS,
+                    remembered=db.recall("quote", limit=4))
+
+    @app.get("/money", response_class=HTMLResponse)
+    def money_page(request: Request, note: str = ""):
+        """What a paid post would pay on your own views, what it costs you in hours, and whether
+        the caption says it is an ad."""
+        return money_view(request, note)
+
+    @app.post("/money/terms", response_class=HTMLResponse)
+    async def money_terms(request: Request):
+        """Her hours, stored as she typed them. Blank is zero, and zero means the app refuses to
+        invent a wage rather than quietly adopting somebody else's."""
+        form = await request.form()
+        got = []
+        for key in ("hourly", "minutes"):
+            raw = str(form.get(key, "") or "").strip().replace(",", ".")
+            try:
+                got.append(max(0.0, float(raw or 0)))
+            except ValueError:
+                return money_view(request, note=f"{key} needs a number, not {raw!r}. Nothing was "
+                                                "saved, so the floor on the page is still the one "
+                                                "you had.",
+                                  checked=None, asked_text="", where="")
+        db.save_terms({"hourly": got[0], "minutes": got[1]})
+        floor = round(got[0] * got[1] / 60.0, 2)
+        tail = (f"costs {money.UNIT}{floor:.2f}, so nothing on this page will quote under it."
+                if floor else "is no floor - the app will not price your time for you.")
+        return money_view(
+            request,
+            note=f"Saved. A post at {got[1]:g} minutes of your time at {money.UNIT}"
+                 f"{got[0]:g} an hour {tail}",
+            checked=None, asked_text="", where="")
+
+    @app.post("/money/label", response_class=HTMLResponse)
+    async def money_label(request: Request):
+        """The caption read against the words the cited guidance actually names. The checkbox is
+        the only way this page can be told the label is in the video too - it cannot watch."""
+        form = await request.form()
+        text = str(form.get("text", "") or "")
+        where = "the text you pasted" if text.strip() else ""
+        staged = db.get_staged()
+        if not text.strip() and staged.get("caption"):
+            text = staged["caption"]
+            where = "the post staged in the composer"
+        if not text.strip():
+            return money_view(request, note="Nothing to read: no text was pasted and no post is "
+                                             "staged.", checked=None, asked_text="", where="")
+        surface = (str(form.get("surface", "") or "") or
+                   (staged.get("surface") or staged.get("platform") or ""))
+        got = money.check_disclosure(text, surface, bool(form.get("in_video")))
+        return money_view(request, note="", checked=got, asked_text=text, where=where)
 
     def repurpose_view(request, passed=None, note=""):
         """The page in either state: what it would rebuild, or what it did. The candidate list

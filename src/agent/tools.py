@@ -29,6 +29,7 @@ from src.metrics import correlate
 from src.metrics.adapt import DATA_FLOOR, analyse
 from src.metrics.adapt import apply as apply_adapt
 from src.metrics.ingest import read_quick
+from src.money import rate as money
 from src.playbook import research
 from src.strategist import engage, slots, voice
 from src.strategist.coach import CADENCE_DAYS, _week_at, build_agenda
@@ -403,6 +404,58 @@ def best_window(kit):
                             for w in report.windows])
 
 
+# ---- money ------------------------------------------------------------------
+
+def money_quote(kit):
+    """What a paid post would pay on her own numbers, and what it costs her before it pays.
+
+    Three sources, each named in the result: the median comes from the posts she imported, the
+    band from dated claims in the playbook, the floor from the two numbers she typed herself.
+    Nothing here is in touch with a brand, and nothing here is a price anyone agreed to.
+    """
+    rows = kit.rows()
+    if not rows:
+        return skipped("no numbers are stored, so there are no median views to price.")
+    terms = kit.db.get_terms()
+    made, thin, uncited = money.quotes(rows, kit.entries(), terms["hourly"], terms["minutes"])
+    if not made:
+        why = thin or uncited
+        return advised("Nothing here is priceable yet - " + "; ".join(why),
+                       quotes=[], thin=thin, uncited=list(uncited), where="/money")
+    top = max(made, key=lambda q: q.anchor)
+    lines = [f"{q.platform}: {q.line}" for q in made]
+    for note in thin:
+        lines.append(f"Refused: {note}.")
+    kit.db.remember("quote", " ".join(lines), "money/rate", date.today().isoformat())
+    return advised(
+        f"{len(made)} platform{'s' if len(made) != 1 else ''} priced from her own posts, with "
+        f"{top.platform} at {money.UNIT}{top.anchor:,.0f} as the number to open on"
+        + (" and no floor set yet" if not top.floor else "") + ".",
+        quotes=[{"platform": q.platform, "posts": q.posts, "median_views": q.median_views,
+                 "low": q.low, "high": q.high, "anchor": q.anchor, "floor": q.floor,
+                 "under_floor": q.under_floor, "line": q.line,
+                 "caveats": q.missing} for q in made],
+        thin=thin, uncited=list(uncited), addons=money.addon_lines(top.anchor),
+        where="/money")
+
+
+def money_label(kit, text: str = ""):
+    """Does the post say it is an ad - read off the caption, not off a hope.
+
+    With no text it checks the post already staged in the composer, which is the one a brand
+    would actually be liable for."""
+    staged = kit.db.get_staged()
+    body = text or (staged.get("caption") or "")
+    surface = "" if text else (staged.get("surface") or staged.get("platform") or "")
+    if not body.strip():
+        return skipped("no caption to read - nothing is staged and no text came with the ask.")
+    got = money.check_disclosure(body, surface)
+    return advised(
+        got.line, status=got.status, safe_to_post=got.safe_to_post, notes=got.notes,
+        surface=surface or "unstated", checked="staged post" if not text else "the text given",
+        needs_video=got.needs_video, in_video=got.in_video, where="/money")
+
+
 # ---- community & queue ------------------------------------------------------
 
 def reply_drafts(kit):
@@ -564,8 +617,16 @@ add("repurpose.cuts", "Rebuild the winning posts in other frames", "Repurposing"
     describe="Cuts the posts the ledger ranks best into the shape each placement wants and "
              "rewrites the copy for that placement from her own pasted samples. Names every "
              "post whose file this app does not hold instead of inventing one.")(repurpose_make)
-add("community.drafts", "Draft the replies", "Make", "queue",
-    describe="Writes replies to the comments she pasted in and refuses the ones needing a "
+add("money.quote", "Price a paid post", "Money", "analyse", needs=("rows",),
+    describe="Median views from her own imported posts against the published cost per thousand, "
+             "with the floor her time sets. It returns a band with the source and the source's "
+             "own limit attached, and refuses a platform with too few posts to have a median.")(
+    money_quote)
+add("money.label", "Check the post says it is an ad", "Money", "analyse", args=("text",),
+    describe="Reads the staged caption, or the text she gives, against the disclosure rule: "
+             "whether the word is there, where it sits, whether the placement needs it in the "
+             "video, and what no text check can see.")(money_label)
+add("community.drafts", "Draft the replies", "Make", "queue",    describe="Writes replies to the comments she pasted in and refuses the ones needing a "
              "fact only she has. Nothing is sent.")(reply_drafts)
 add("queue.stage", "Stage a day for posting", "Brief", "queue", needs=("plan", "answers"),
     args=("on",),

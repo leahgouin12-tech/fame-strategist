@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Money &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Money</h1>
+<p class="sub">A brand asks what you want. This page answers in the only three numbers you
+actually have: the median views of the posts you imported, a published cost per thousand that
+names where it came from, and what the post costs you in your own hours. Then it reads the
+caption for the word that legally has to be in it.</p>
+<p class="k">Nothing here speaks to a brand, finds a deal, signs anything or converts a
+currency. The bands are published ranges that <strong>disagree with each other</strong>, so they
+stay separate rows instead of being blended into one friendly figure, and a number whose source
+has gone stale or left the library drops off the page rather than being shown with a dead
+citation.</p>
+
+{% if note %}<p class="k"><strong>{{ note }}</strong></p>{% endif %}
+
+<h2>The quote</h2>
+{% if quotes %}
+{% for q in quotes %}
+<div class="card">
+  <div class="row">
+    <span class="chip post">{{ q.platform }}</span>
+    <span class="k">{{ q.posts }} of your posts &middot; median {{ '{:,}'.format(q.median_views) }}
+      views</span>
+    {% if q.under_floor %}<span class="chip skip">under your own cost</span>
+    {% else %}<span class="chip fix">within the bands</span>{% endif %}
+  </div>
+  <p class="big">{{ unit }}{{ '{:,.0f}'.format(q.anchor) }} to open on</p>
+  <p class="k">{{ q.line }}</p>
+  <table class="tbl">
+    <tr><th>the way it is priced</th><th>what it gives you</th><th>what it actually measured</th></tr>
+    {% for b in q.bands %}
+    {% set lo, hi = b.per_thousand(q.median_views) %}
+    <tr>
+      <td>{{ b.label }}</td>
+      <td>{{ unit }}{{ '{:,.2f}'.format(lo) }}{% if hi != lo %} &ndash; {{ unit }}{{ '{:,.2f}'.format(hi) }}{% endif %}</td>
+      <td class="k tiny">{{ b.measured }}<br>
+        <a href="#src-{{ b.entry }}">{{ b.entry }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if q.floor %}
+  <p class="limit">Your floor is {{ unit }}{{ '{:,.2f}'.format(q.floor) }}
+    {{ '— this quote sits under it, so the honest number to send is the floor.'
+       if q.under_floor else '— the quote sits above it, which is the only kind worth taking.' }}</p>
+  {% else %}
+  <p class="limit">No floor set, so nothing here says whether this pays you for the time it
+    takes. Put the two numbers in below and the page will.</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<div class="card">
+  <p class="big">Nothing is priceable yet.</p>
+  {% if thin %}
+  <p class="k">Refused, with the reason &mdash; a median struck from three posts is one good
+    afternoon, not a rate:</p>
+  <ul class="k">{% for t in thin %}<li>{{ t }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if uncited %}
+  <p class="k">Priced from nothing: the published claims behind
+    {{ uncited | join(', ') }} are stale or missing from the library, so their numbers were
+    dropped rather than quoted anyway.</p>
+  {% endif %}
+  {% if not thin and not uncited %}
+  <p class="k">No metrics are imported, so there is no median of yours to multiply. Import a
+    stats CSV on <a href="/numbers">Numbers</a> first &mdash; this page reads that same import
+    and nothing else.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2>Your numbers, per platform</h2>
+<div class="card">
+  {% if priced %}
+  <table class="tbl">
+    <tr><th>platform</th><th>posts imported</th><th>median views</th><th>enough to price?</th></tr>
+    {% for p, (n, med) in priced | dictsort %}
+    <tr>
+      <td>{{ p }}</td>
+      <td>{{ n }}</td>
+      <td>{{ '{:,}'.format(med) }}</td>
+      <td>{{ 'yes' if n >= least else 'no — ' ~ least ~ ' needed' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k tiny">Rows with no views, and rows whose platform was never named &mdash; the ones
+    typed quickly come in as &ldquo;logged&rdquo;, an export without a platform column as
+    &ldquo;unknown&rdquo; &mdash; are left out of the medians. Averaging your TikTok views with
+    your YouTube views and calling the result a platform is the one way to be wrong twice.</p>
+  {% else %}
+  <p class="k">The import holds nothing this page can group by platform.</p>
+  {% endif %}
+</div>
+
+<h2>What your time costs</h2>
+<div class="card">
+  <form method="post" action="/money/terms">
+    <div class="grid">
+      <div>
+        <label for="hourly">An hour of your work, in {{ unit }}</label>
+        <input type="number" id="hourly" name="hourly" step="0.5" min="0"
+               value="{{ terms.hourly or '' }}" placeholder="40">
+      </div>
+      <div>
+        <label for="minutes">Minutes from idea to posted</label>
+        <input type="number" id="minutes" name="minutes" step="1" min="0"
+               value="{{ terms.minutes or '' }}" placeholder="75">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Save the floor</button>
+      </div>
+    </div>
+  </form>
+  {% if terms.hourly and terms.minutes %}
+  <p class="claim">A post costs you {{ unit }}{{ '{:,.2f}'.format(terms.hourly * terms.minutes / 60) }}
+    before anybody pays anything.</p>
+  {% else %}
+  <p class="k">Both blank means the page states no floor at all. It will not adopt a wage for you
+    and then quote it as yours.</p>
+  {% endif %}
+</div>
+
+{% if addons %}
+<h2>What they will ask to add on</h2>
+<div class="card">
+  <p class="k">Priced off {{ unit }}{{ '{:,.0f}'.format(top.anchor) }}. Two of these are quoted
+    as a percent of <em>their ad spend</em>, which you cannot see &mdash; the useful move is
+    asking which shape they mean rather than guessing.</p>
+  <table class="tbl">
+    <tr><th>permission</th><th>shape</th><th>what that is here</th><th>where the range is from</th></tr>
+    {% for a in addons %}
+    <tr>
+      <td>{{ a.name }}</td>
+      <td class="k tiny">{{ a.shape }}</td>
+      <td>{{ a.range }}</td>
+      <td class="k tiny">{{ a.basis }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k tiny">Follower-tier pricing is the other basis brands open with. It is named in the
+    library{% if 'money-per-tier-basis' in cited %} and cited
+    <a href="#src-money-per-tier-basis">below</a>{% endif %}, but this page never turns it into a
+    number for you: it has no follower count it trusts, only the views you exported.</p>
+</div>
+{% endif %}
+
+<h2>Does the post say it is an ad?</h2>
+<div class="card">
+  <p class="k">The guidance this app cites names {{ named | join(', ') }}. This reads text &mdash;
+    it cannot see the crop a platform cuts, and it cannot hear a video.</p>
+  <form method="post" action="/money/label">
+    <label for="text">Caption to check</label>
+    <textarea id="text" name="text" rows="4"
+              placeholder="{{ 'Nothing is staged in the composer, so paste one.' if not check_text else '' }}">{{ check_text }}</textarea>
+    <div class="grid">
+      <div>
+        <label for="surface">Placement</label>
+        <input type="text" id="surface" name="surface"
+               value="{{ staged.surface if staged else '' }}"
+               placeholder="tiktok, reels, shorts, youtube, story, feed">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <label class="k"><input type="checkbox" name="in_video" value="1"
+              {% if check and check.in_video %}checked{% endif %}>
+          the label also appears in the video itself</label>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Check the caption</button>
+      </div>
+    </div>
+  </form>
+
+  {% if check %}
+  <div class="row" style="margin-top:12px">
+    <span class="chip {{ 'post' if check.safe_to_post else ('skip' if check.status == 'missing' else 'fix') }}">
+      {{ 'posts as it is' if check.safe_to_post else check.status }}</span>
+    <span class="k">{{ check_from }}</span>
+  </div>
+  <p class="claim">{{ check.line }}</p>
+  {% if check.notes %}
+  <ul class="k">{% for n in check.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if check.compensated and check.status == 'missing' %}
+  <p class="limit">Something of value changed hands in that text, which is a material connection:
+    free product or a favour counts, so a label is owed even with no fee anywhere in the post.</p>
+  {% endif %}
+  {% endif %}
+</div>
+
+<h2>Where the numbers come from</h2>
+{% for key, e in cited | dictsort %}
+<div class="card" id="src-{{ key }}">
+  <div class="row">
+    <span class="chip {{ 'post' if e.confidence.value == 'proven' else 'fix' }}">
+      {{ e.confidence.value }}</span>
+    <span class="k">{{ key}} &middot; read as of {{ e.as_of }} &middot;
+      {{ e.sources | length }} source{{ '' if e.sources | length == 1 else 's' }}</span>
+  </div>
+  <p class="k">{{ e.claim }}</p>
+  <p class="k tiny">{% for s in e.sources %}{{ s.title }} ({{ s.tier.value }}){% if not loop.last %} &middot; {% endif %}{% endfor %}</p>
+  <p class="limit"><strong>Does not claim:</strong> {{ e.does_not_claim }}</p>
+</div>
+{% endfor %}
+
+{% if remembered %}
+<h2>What this page has said before</h2>
+<div class="card">
+  {% for r in remembered %}
+  <p class="k">{{ r.seen_at }} &mdash; {{ r.body }}</p>
+  {% endfor %}
+  <p class="k tiny">Stored so the agent can be asked what it quoted last month. A quote you sent
+    and a quote the brand agreed to are different records, and this page only holds the first
+    kind.</p>
+</div>
+{% endif %}
+{% endblock %}

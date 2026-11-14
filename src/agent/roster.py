@@ -6,9 +6,9 @@ slice of the tool catalogue and nothing more: The Scout cannot be hired unless
 Both rules run when this module is imported, so a card with no work behind it raises with the
 offender's name instead of turning up on the page as a button that does nothing.
 
-This is also why there are eight desks and not forty: the roster is derived from the twenty
-tools that exist on this laptop, so every name on the page can be clicked, runs real code and
-leaves a real step in the history.
+This is also why the desk list is as long as it is and no longer: it is derived from the tools
+that exist on this laptop, so every name on the page can be clicked, runs real code and leaves a
+real step in the history. A department with no tool in it gets no card.
 """
 from dataclasses import dataclass
 
@@ -82,6 +82,12 @@ DESKS = (
          ("repurpose.cuts",),
          ("repurpose", "reuse", "other shape", "other frame", "story", "rebuild the best",
           "cut these", "remake")),
+    Desk("money", "The Bookkeeper",
+         "Prices a paid post from her own views and her own hours, and reads the caption for "
+         "the label that has to be on it.",
+         ("money.quote", "money.label"),
+         ("charge", "paid", "money", "sponsor", "brand deal", "rate card", "invoice", "quote",
+          "gifted", "disclosure", "is this an ad", "label", "how much should i ask")),
 )
 
 
