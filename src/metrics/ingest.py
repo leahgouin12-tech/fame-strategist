@@ -1,3 +1,19 @@
+"""Two ways her numbers get in: a file she exports, and three numbers she types.
+
+MetricRow is what both paths produce. read_csv requires post_ref, views, avg_watch_pct
+and follows_gained as column names, matches those names case-insensitively so a
+platform's own export still loads, and names a genuinely missing column instead of
+substituting a zero; read_quick takes one line per post as views, watch percent and
+follows, and rejects a line that does not carry three numbers. when pulls the day out of
+a date, and the hour only if the row itself named one - a paste with no clock in it does
+not get an invented one.
+
+A quick log records what was typed and nothing more: published_at becomes today, the
+platform becomes "logged", and reach, comments and saves are written as 0 rather than
+left blank, so the only columns adapt.py can read a conclusion out of are views, watch
+and follows; one unreadable line refuses the whole paste rather than dropping it quietly.
+"""
+
 import csv
 import re
 from dataclasses import dataclass

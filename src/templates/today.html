@@ -1,132 +1,201 @@
 {% extends "base.html" %}
 {% block title %}Today &middot; Fame Strategist{% endblock %}
 {% block body %}
-<h1>{{ today.date }}</h1>
-<p class="sub">Week {{ today.week_no }} &middot; testing <strong>{{ today.hypothesis }}</strong>
-  &middot; format {{ today.format }}</p>
+{# Two columns, one rule down the middle: the work you do on the left, what you carry
+   out of the room (caption, file, posting window) on the right, where it stays put
+   while you read the shot list. #}
+<section class="callsheet">
+  <header class="cs-head">
+    <p class="cs-eyebrow">Week {{ today.week_no }} of 8 &middot; {{ today.format }}</p>
+    <h1>{{ today.date }}</h1>
+    <p class="cs-try">Testing <strong>{{ today.hypothesis }}</strong></p>
+  </header>
 
-<div class="card">
-  <h2 style="margin-top:0">Say this first</h2>
-  <p class="big" style="font-size:22px;line-height:1.35">{{ today.hook }}</p>
-  <p class="k">{{ today.cost_note }}</p>
-</div>
-
-<div class="grid">
-  <div class="card">
-    <h3>Shots &mdash; {{ today.shots|length }} takes, {{ (today.shots|sum(attribute='seconds')) }}s of filming</h3>
-    <ol class="shots">
-      {% for s in today.shots %}
-      <li>{{ s.desc }}<br><span class="k">{{ s.framing }} &middot; {{ s.seconds }}s &middot; {{ s.note }}</span></li>
-      {% endfor %}
-    </ol>
+  {# The day is a list you work down, so it says how far down you are. On a phone the
+     bar stays pinned under the title while you shoot. Ticks live in this device's own
+     store - they are a shooting aid, not a record. The record is "mark as posted". #}
+  <div class="daybar" id="daybar" data-day="{{ day_iso }}">
+    <p class="db-label"><b id="db-count">0</b> of {{ today.shots|length }} shot</p>
+    <span class="meter" aria-hidden="true"><i id="db-fill"></i></span>
+    <p class="db-hint" id="db-hint">Tick them as you get them.</p>
   </div>
-  <div class="card">
-    <h3>The beats it has to hit</h3>
-    <ul>{% for b in today.beats %}<li>{{ b }}</li>{% endfor %}</ul>
-    <h3>Caption</h3>
-    <p class="claim">{{ today.caption }}</p>
-    <h3>Tags</h3>
-    <p>{% for t in today.hashtags %}<span class="chip">{{ t }}</span> {% endfor %}</p>
-    <p class="k">#fyp-style tags are refused; they carry no signal and cost a slot.</p>
-  </div>
-</div>
 
-<div class="card">
-  <h2 style="margin-top:0">Ready to post</h2>
-  {% if note %}<p class="k"><strong>{{ note }}</strong></p>{% endif %}
-  <p class="k">One block. Copy it, paste it into the app on your phone, then pick the file it goes with.</p>
-  <textarea id="postcopy" rows="4" spellcheck="false">{{ today.caption }}
+  <div class="cs-body">
+    <div class="cs-main">
+      <h2 class="say">Say this first</h2>
+      <p class="hook">{{ today.hook }}</p>
+      <p class="k">{{ today.cost_note }}</p>
+
+      <h2>Shots &mdash; {{ today.shots|length }} takes, {{ (today.shots|sum(attribute='seconds')) }}s of filming</h2>
+      <p class="cs-note">In order, back to back, while the light you set up is still the light in
+        the room.</p>
+      <ol class="call">
+        {% for s in today.shots %}
+        <li class="take">
+          <label class="box">
+            <input type="checkbox" class="shot-in" aria-label="Take {{ loop.index }} shot">
+            <span class="box-n">{{ "%02d" % loop.index }}</span>
+            <span class="box-y" aria-hidden="true">&#10003;</span>
+          </label>
+          <div class="take-b">
+            <p class="what">{{ s.desc }}</p>
+            <p class="how"><span>{{ s.framing }}</span><span>{{ s.seconds }}s</span><span>{{ s.note }}</span></p>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+
+      <h2>The beats it has to hit</h2>
+      <ul class="beats">{% for b in today.beats %}<li>{{ b }}</li>{% endfor %}</ul>
+    </div>
+
+    <aside class="cs-side">
+      <div class="cs-block">
+        <h2>Caption</h2>
+        <p class="claim">{{ today.caption }}</p>
+        <p class="tagline">{% for t in today.hashtags %}<span class="chip">{{ t }}</span> {% endfor %}</p>
+        <p class="k tiny">#fyp-style tags are refused; they carry no signal and cost a slot.</p>
+
+        {% if note %}<p class="k"><strong>{{ note }}</strong></p>{% endif %}
+        <textarea id="postcopy" rows="4" spellcheck="false" aria-label="The block you copy">{{ today.caption }}
 
 {{ today.hashtags|join(' ') }}</textarea>
-  <p><button type="button" class="btn ghost" id="copybtn">Copy the block</button>
-    <span class="k" id="copynote">Nothing copied yet.</span></p>
+        <p class="row"><button type="button" class="ghost" id="copybtn">Copy the block</button>
+          <span class="k" id="copynote">Nothing copied yet.</span></p>
 
-  <form method="post" action="/today/attach">
-    <input type="hidden" name="on" value="{{ day_iso }}">
-    <label class="k" for="postfile">The file this day went out with</label><br>
-    <select name="file" id="postfile">
-      <option value="">nothing attached yet</option>
-      {% for m in postables %}
-      <option value="{{ m.rel }}"
-        {{ "selected" if attached and attached.file == m.rel }}>{{ m.kind }} &middot; {{ m.rel }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit">{{ "Re-tie it" if attached else "Tie it to this day" }}</button>
-  </form>
+        <form method="post" action="/today/attach" class="tie">
+          <input type="hidden" name="on" value="{{ day_iso }}">
+          <label class="k" for="postfile">The file this day went out with</label>
+          <select name="file" id="postfile">
+            <option value="">nothing attached yet</option>
+            {% for m in postables %}
+            <option value="{{ m.rel }}"
+              {{ "selected" if attached and attached.file == m.rel }}>{{ m.kind }} &middot; {{ m.rel }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">{{ "Re-tie it" if attached else "Tie it to this day" }}</button>
+        </form>
 
-  {% if attached %}
-  <p class="k">Posting <strong>{{ attached.file }}</strong> &mdash;
-    a {{ attached.kind }} &mdash; on {{ day_iso }}.</p>
-  {% if attached.kind == "photo" %}
-  <img src="/inbox/{{ attached.file | urlencode }}" alt="{{ attached.file }}"
-       style="max-width:170px;border-radius:10px;display:block;margin-top:8px">
-  {% endif %}
-  {% elif postables %}
-  <p class="k">Nothing tied to this day yet. The list is what is in your folders right now.</p>
-  {% else %}
-  <p class="k">No files to pick from yet &mdash; the photo and clip folders are both empty.
-    Save an edit or a cut and it appears here.</p>
-  {% endif %}
-  <h3>When you post</h3>
-  <p class="k">{{ slot_report.note }}</p>
-  {% if slot_report.measured %}
-  <table class="tbl">
-    <tr><th>Window</th><th>Posts</th><th>Median views</th><th>Follows per 1k</th></tr>
-    {% for w in slot_report.windows %}
-    <tr><td>{{ w.block }} {{ w.hours }}</td><td>{{ w.posts }}</td>
-      <td>{{ w.median_views }}</td><td>{{ w.median_follow_rate }}</td></tr>
-    {% endfor %}
-  </table>
-  {% for w in slot_report.thin %}
-  <p class="k">{{ w.block }} left out: {{ w.posts }} post{{ '' if w.posts == 1 else 's' }} timed
-    in it, which is not enough to average.</p>
-  {% endfor %}
-  {% else %}
-  <p class="k">Until then the default stands: pick one window you can hold for three weeks, and
-    post inside it. No slot off a vendor chart &mdash; the two biggest published charts name
-    opposite days for the same platform
-    (<a href="/sources?tier=contested"><span class="chip">myth-best-time-to-post-chart</span></a>).
-    {{ slot_report.need }} more post{{ '' if slot_report.need == 1 else 's' }} with a clock time on it
-    before this page names a window of your own.</p>
-  {% endif %}
-  <p class="k">Alt text is the one line this app will not write for you. It measures light,
-    shape and steadiness &mdash; not what is in the frame &mdash; so only you can say what to
-    describe.</p>
-  <p class="k">This app does not post for you. No scheduled uploads, no signing in as you,
-    nothing leaves this machine.</p>
-  <script>
-    const box = document.getElementById("postcopy");
-    document.getElementById("copybtn").addEventListener("click", async () => {
-      const noteEl = document.getElementById("copynote");
-      box.focus();
-      box.select();
-      try {
-        await navigator.clipboard.writeText(box.value);
-      } catch (e) {
-        document.execCommand("copy");
-      }
-      // The block is left selected on purpose: if the browser refused the silent copy,
-      // Ctrl+C still works, and the note never claims more than it knows.
-      noteEl.textContent = "Copied. If nothing landed, the block is selected - press Ctrl+C.";
+        {% if attached %}
+        <p class="k">Posting <strong>{{ attached.file }}</strong> &mdash;
+          a {{ attached.kind }} &mdash; on {{ day_iso }}.</p>
+        {% if attached.kind == "photo" %}
+        <img class="tied" src="/inbox/{{ attached.file | urlencode }}" alt="{{ attached.file }}">
+        {% endif %}
+        {% elif postables %}
+        <p class="k">Nothing tied to this day yet. The list is what is in your folders right now.</p>
+        {% else %}
+        <p class="k">No files to pick from yet &mdash; the photo and clip folders are both empty.
+          Save an edit or a cut and it appears here.</p>
+        {% endif %}
+
+        <form method="post" action="/today/done" class="tick">
+          <input type="hidden" name="on" value="{{ day_iso }}">
+          {% if posted %}
+          <span class="chip proven">marked posted</span>
+          <p class="k">This day is now evidence. The plan will not rewrite a week you already lived.</p>
+          {% else %}
+          <button type="submit">Mark as posted</button>
+          <span class="k">Not marked posted yet.</span>
+          {% endif %}
+        </form>
+      </div>
+
+      <div class="cs-block">
+        <h2>When you post</h2>
+        <p class="k">{{ slot_report.note }}</p>
+        {% if slot_report.measured %}
+        <table class="tbl">
+          <tr><th>Window</th><th>Posts</th><th>Median views</th><th>Follows per 1k</th></tr>
+          {% for w in slot_report.windows %}
+          <tr><td>{{ w.block }} {{ w.hours }}</td><td>{{ w.posts }}</td>
+            <td>{{ w.median_views }}</td><td>{{ w.median_follow_rate }}</td></tr>
+          {% endfor %}
+        </table>
+        {% for w in slot_report.thin %}
+        <p class="k">{{ w.block }} left out: {{ w.posts }} post{{ '' if w.posts == 1 else 's' }} timed
+          in it, which is not enough to average.</p>
+        {% endfor %}
+        {% else %}
+        <p class="k">Until then the default stands: pick one window you can hold for three weeks, and
+          post inside it. No slot off a vendor chart &mdash; the two biggest published charts name
+          opposite days for the same platform
+          (<a href="/sources?tier=contested"><span class="chip">myth-best-time-to-post-chart</span></a>).
+          {{ slot_report.need }} more post{{ '' if slot_report.need == 1 else 's' }} with a clock time on it
+          before this page names a window of your own.</p>
+        {% endif %}
+        <p class="k">One block, one paste: the box above is the caption and the tags together.
+          Alt text is the one line this app will not write for you. It measures light,
+          shape and steadiness &mdash; not what is in the frame &mdash; so only you can say what to
+          describe.</p>
+        <p class="k">This app does not post for you. No scheduled uploads, no signing in as you,
+          nothing leaves this machine.</p>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="cs-foot">
+    <h2>Why this day looks like this</h2>
+    <p class="k">Built from
+      {% for e in today.sourced_from %}<a href="/sources"><span class="chip">{{ e }}</span></a> {% endfor %}
+      {% if not today.sourced_from %}<span class="chip contested">no source attached - treat as a draft</span>{% endif %}
+    </p>
+  </footer>
+</section>
+<script>
+  const box = document.getElementById("postcopy");
+  document.getElementById("copybtn").addEventListener("click", async () => {
+    const noteEl = document.getElementById("copynote");
+    box.focus();
+    box.select();
+    try {
+      await navigator.clipboard.writeText(box.value);
+    } catch (e) {
+      document.execCommand("copy");
+    }
+    // The block is left selected on purpose: if the browser refused the silent copy,
+    // Ctrl+C still works, and the note never claims more than it knows.
+    noteEl.textContent = "Copied. If nothing landed, the block is selected - press Ctrl+C.";
+  });
+
+  // The tick list is a shooting aid: it remembers itself on this device and nowhere
+  // else, because the thing that actually counts as evidence is marking the day posted.
+  const bar = document.getElementById("daybar");
+  const takes = Array.from(document.querySelectorAll(".call .shot-in"));
+  const count = document.getElementById("db-count");
+  const fill = document.getElementById("db-fill");
+  const hint = document.getElementById("db-hint");
+  const storeKey = "fame.takes." + bar.dataset.day;
+  const tick = document.querySelector(".tick");
+  // Only the unposted day has a button to light up; a day already marked posted keeps its
+  // own note, which is a record rather than an invitation.
+  const wait = tick.querySelector("button") ? tick.querySelector(".k") : null;
+  const rest = wait ? wait.textContent : "";
+  let done = [];
+  try { done = JSON.parse(localStorage.getItem(storeKey)) || []; } catch (e) { done = []; }
+
+  function paint() {
+    const got = takes.filter((t) => t.checked).length;
+    const full = takes.length > 0 && got === takes.length;
+    takes.forEach((t) => t.closest(".take").classList.toggle("done", t.checked));
+    count.textContent = got;
+    fill.style.width = (takes.length ? Math.round(got / takes.length * 100) : 0) + "%";
+    bar.classList.toggle("full", full);
+    // The reward for finishing the list is the button that actually closes the day.
+    tick.classList.toggle("ready", full);
+    if (wait) wait.textContent = full ? "Every take is in." : rest;
+    hint.textContent = got === 0 ? "Tick them as you get them."
+      : got < takes.length ? (takes.length - got) + " to go."
+      : "That is the day shot. Tie the file, then mark it posted.";
+  }
+  takes.forEach((t, i) => {
+    t.checked = !!done[i];
+    t.addEventListener("change", () => {
+      done = takes.map((x) => x.checked);
+      try { localStorage.setItem(storeKey, JSON.stringify(done)); } catch (e) {}
+      paint();
     });
-  </script>
-</div>
-
-<div class="card">
-  <h3>Why this day looks like this</h3>
-  <p class="k">Built from
-    {% for e in today.sourced_from %}<a href="/sources"><span class="chip">{{ e }}</span></a> {% endfor %}
-    {% if not today.sourced_from %}<span class="chip contested">no source attached - treat as a draft</span>{% endif %}
-  </p>
-  <form method="post" action="/today/done">
-    <input type="hidden" name="on" value="{{ day_iso }}">
-    {% if posted %}
-    <span class="chip proven">marked posted</span>
-    <p class="k">This day is now evidence. The plan will not rewrite a week you already lived.</p>
-    {% else %}
-    <button type="submit">Mark as posted</button>
-    <span class="k">Not marked posted yet.</span>
-    {% endif %}
-  </form>
-</div>
+  });
+  paint();
+</script>
 {% endblock %}

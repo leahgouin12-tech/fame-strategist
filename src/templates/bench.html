@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Benchmarks &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Benchmarks</h1>
+<p class="sub">&ldquo;Is this good?&rdquo; has no answer inside one post. A 3% save rate means
+nothing until you know what the posts that blew up in your niche were doing &mdash; so write
+those down here, from the numbers you can see on the screen, and this page tells you where a
+post of yours sits among them.</p>
+<p class="k">Nothing here reads a platform. Every figure in this list is one you typed or
+exported, which means the comparison is only as wide as the list you build: five rows is five
+posts, not the whole app. It also refuses a percentile before there are {{ need }} comparable
+rows, rather than calling the 2nd of 2 posts &ldquo;50th percentile&rdquo;.</p>
+
+{% if reading %}
+<div class="card">
+  <p class="k">Read of &ldquo;{{ target.label }}&rdquo; against the {{ reading.n }} comparable
+    posts in this list{% if reading.dropped %}, with {{ reading.dropped}} more set aside for
+    being under {{ floor }} views{% endif %}</p>
+  {% if reading.ok %}
+  <div class="row">
+    <span class="big">{{ reading.percentile_text }}</span>
+    <span class="chip {{ 'post' if reading.percentile >= 60 else ('fix' if reading.percentile >= 40 else 'skip') }}">
+      {{ reading.band }}</span>
+  </div>
+  <span class="meter" aria-hidden="true"><i style="width: {{ reading.percentile }}%"></i><b style="left: 50%"></b></span>
+  <p class="k tiny">The bar is where this post sits in the list you wrote; the mark is the middle
+    of that list.</p>
+  {% for w in reading.words %}
+  <p class="{{ 'claim' if loop.first else 'k' }}">{{ w }}</p>
+  {% endfor %}
+  <table class="tbl">
+    <tr><th>number</th><th>yours</th><th>sits at</th><th>median</th><th>top post</th><th></th></tr>
+    {% for key, r in readings %}
+    <tr>
+      <td>{{ metrics[key][0] }}</td>
+      <td>{{ r.value_text }}</td>
+      <td>{{ r.percentile_text if r.ok else 'not enough rows' }}</td>
+      <td>{{ r.median_text if r.ok else '—' }}</td>
+      <td>{{ r.top_text if r.ok else '—' }}</td>
+      <td>
+        <form method="post" action="/bench/read">
+          <input type="hidden" name="bench_id" value="{{ target.id }}">
+          <input type="hidden" name="metric" value="{{ key }}">
+          <button type="submit" class="ghost tiny-btn {{ 'on' if key == reading.metric }}">
+            {{ 'reading this' if key == reading.metric else 'read this' }}</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k tiny">On a phone this table slides sideways - nothing is left off it.</p>
+  {% else %}
+  <p class="big">&mdash;</p>
+  {% for w in reading.words %}<p class="{{ 'claim' if loop.first else 'k' }}">{{ w }}</p>{% endfor %}
+  {% endif %}
+  <p class="limit"><strong>What this is not:</strong> a sample of the platform, a promise about
+    the next post, or a verdict on you. It is the posts somebody wrote numbers for here, and the
+    reading moves the moment you add rows that look different from these.</p>
+</div>
+{% endif %}
+
+<h2>Write one down</h2>
+<div class="card">
+  <form method="post" action="/bench/add">
+    <div class="grid">
+      <div>
+        <label>What it is</label>
+        <input type="text" name="label" maxlength="80" placeholder="her filename, their handle, the first line">
+      </div>
+      <div>
+        <label>Whose numbers</label>
+        <select name="origin">
+          <option value="saw it">someone else&rsquo;s post I looked at</option>
+          <option value="yours">a post of mine</option>
+        </select>
+      </div>
+      <div>
+        <label>Platform</label>
+        <select name="platform">
+          <option value="">not stated</option>
+          {% for key, label in known %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Views</label>
+        <input type="text" name="views" placeholder="12.4k" inputmode="numeric">
+      </div>
+      <div><label>Likes</label><input type="text" name="likes" inputmode="numeric"></div>
+      <div><label>Comments</label><input type="text" name="comments" inputmode="numeric"></div>
+      <div><label>Saves</label><input type="text" name="saves" inputmode="numeric"></div>
+      <div><label>Shares</label><input type="text" name="shares" inputmode="numeric"></div>
+      <div><label>New followers it brought</label><input type="text" name="gained" inputmode="numeric"></div>
+    </div>
+    <p class="row" style="margin-top:14px">
+      <button type="submit">Add it and read it</button>
+      <span class="k">Written the way it shows on screen: 12.4k, 3,400 and 1 234 all land on the
+        same number. Leave out a count the app did not show you &mdash; a blank is honest, a
+        guessed digit is not.</span>
+    </p>
+  </form>
+  {% if note %}<p class="claim">{{ note }}</p>{% endif %}
+</div>
+
+<h2>Or the whole screen at once</h2>
+<div class="card">
+  <form method="post" action="/bench/paste">
+    <label>One post per line</label>
+    <textarea name="lines" rows="6" placeholder="Outfit-07, 41000, 2100, 84, 410, 96, 61&#10;her reel, 180k, 9400, 220, 1100, 380, 540"></textarea>
+    <p class="row" style="margin-top:12px">
+      <button type="submit">Add every line</button>
+      <span class="k">{{ columns | join(', ') }} &mdash; in that order, comma, tab or semicolon
+        between them. A line missing its trailing counts is added with them at zero; a line that
+        cannot be read is named back to you instead of dropped.</span>
+    </p>
+  </form>
+</div>
+
+<h2>The list</h2>
+{% if rows or mine %}
+<div class="card">
+  <table class="tbl">
+    <tr><th>post</th><th>whose</th><th>views</th><th>actions<br>per 100</th>
+      <th>saves<br>per 100</th><th>shares<br>per 100</th><th>new per<br>1,000</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.label }}{% if r.platform %} <span class="k tiny">{{ r.platform }}</span>{% endif %}</td>
+      <td><span class="chip {{ 'post' if r.origin == 'yours' else 'strong' }}">{{ r.origin }}</span></td>
+      <td>{{ '{:,}'.format(r.views) }}</td>
+      <td>{{ '%.1f'|format(r.engagement) }}</td>
+      <td>{{ '%.1f'|format(r.saves_per_100) }}</td>
+      <td>{{ '%.1f'|format(r.shares_per_100) }}</td>
+      <td>{{ '%.1f'|format(r.follows_per_1k) }}</td>
+      <td class="row">
+        <form method="post" action="/bench/read">
+          <input type="hidden" name="bench_id" value="{{ r.id }}">
+          <input type="hidden" name="metric" value="{{ metric }}">
+          <button type="submit" class="ghost tiny-btn">Read</button>
+        </form>
+        <form method="post" action="/bench/forget">
+          <input type="hidden" name="bench_id" value="{{ r.id }}">
+          <button type="submit" class="ghost tiny-btn">Forget</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    {% if mine %}
+    {% for r in mine %}
+    <tr>
+      <td>{{ r.label }}</td>
+      <td><span class="chip post">exported</span></td>
+      <td>{{ '{:,}'.format(r.views) }}</td>
+      <td>{{ '%.1f'|format(r.engagement) }}</td>
+      <td>{{ '%.1f'|format(r.saves_per_100) }}</td>
+      <td>{{ '%.1f'|format(r.shares_per_100) }}</td>
+      <td>{{ '%.1f'|format(r.follows_per_1k) }}</td>
+      <td class="row">
+        <form method="post" action="/bench/read">
+          <input type="hidden" name="bench_id" value="{{ r.id }}">
+          <input type="hidden" name="metric" value="{{ metric }}">
+          <button type="submit" class="ghost tiny-btn">Read</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+  </table>
+  <p class="k tiny">On a phone this table slides sideways - all eight columns are here.</p>
+  <p class="k">{{ rows | length }} typed
+    {% if mine %}+ {{ mine | length }} from the export on the Numbers page, which live there and
+    are not forgotten by this page{% endif %}.
+    Posts under {{ floor }} views are left out of any comparison and the reading says how many
+    were set aside.</p>
+  {% if rows %}
+  <form method="post" action="/bench/clear" class="row" style="margin-top:12px">
+    <button type="submit" class="ghost tiny-btn">Forget the whole typed list</button>
+    <span class="k">Only what you typed here. Your exported posts and every file stay.</span>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+<div class="card">
+  <p class="claim">Nothing in the list yet.</p>
+  <p class="k">The fastest way to make this useful: open five posts in your niche that clearly
+    went &mdash; not the biggest accounts on earth, the ones you could actually be compared to,
+    ideally at a similar follower count &mdash; and write their numbers in. Five rows is the
+    minimum this page will give a percentile for; below that it tells you to stop, which is the
+    honest answer.</p>
+  {% if mine %}<p class="k">Your {{ mine | length }} exported posts are already here and counted
+    as &ldquo;yours&rdquo;.</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

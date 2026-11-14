@@ -178,11 +178,12 @@
         still. Nothing about the clip changes.</p>
     </form>
 
-    <div class="need"><strong>What this will not do.</strong> No face slimming, no body reshaping,
-      no skin smoothing, no generated frames. ffmpeg has filters that do all four
-      (<code>dnn_processing</code> among them) and this app refuses to build a command line that
-      mentions them &mdash; there is a test for exactly that. Everything above moves, cuts,
-      brightens or fades pixels your camera already recorded.</div>
+    <div class="need"><strong>What this engine stops at.</strong> Everything above moves, cuts,
+      brightens or fades pixels your camera already recorded. ffmpeg does have filters that repaint
+      a face frame by frame (<code>dnn_processing</code> among them); this clip engine does not wire
+      one up, because a moving reshape is a per-frame mesh job &mdash; one drag, then the next frame,
+      then the next. A face is a <strong>photo-editor job</strong>: pull a frame out below and finish
+      it in the studio, which has the mesh and the brushes.</div>
 
     <p class="limit"><strong>Does not establish:</strong> {{ verdict.limit }}</p>
   </div>

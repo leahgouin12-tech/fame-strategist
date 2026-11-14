@@ -181,12 +181,23 @@ def recase(text: str, profile: VoiceProfile) -> str:
     return text
 
 
+# The words a line must not stop on. Trimming to a budget is one thing; leaving "on a" at the
+# end is the fingerprint of a machine that cut her sentence off. Only words that cannot close
+# an English sentence are here - pronouns can ("that is on you"), so they stay.
+_ORPHANS = frozenset(
+    "a an the and or but if then than as at by for from in of on to with without upon "
+    "is are was were be been being my your her his our their".split())
+
+
 def _fit(text: str, budget: int) -> str:
-    """Whole words only, ending on a sentence boundary the reader can hear."""
+    """Whole words only, ending on a boundary the reader can hear."""
     parts = text.split()
     if len(parts) <= budget:
         return text
-    cut = " ".join(parts[:budget]).rstrip(" ,;:")
+    kept = parts[:budget]
+    while len(kept) > 1 and kept[-1].lower().strip(".,;:!?") in _ORPHANS:
+        kept.pop()
+    cut = " ".join(kept).rstrip(" ,;:")
     return cut + ("." if not cut.endswith((".", "!", "?")) else "")
 
 

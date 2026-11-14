@@ -1,3 +1,20 @@
+"""One day's shot list: the format, the shots, the spoken hook, the caption, the tags.
+
+FORMATS holds seven of them - lifestyle-day-in-life, outfit-and-style, beauty-glam,
+opinion-and-hottake, tutorial-value, build-in-public-devlog, comedy-sketch-pov - each
+with its narrative beats, its shots with framings and second counts, and its hashtags.
+build_day picks the one matching the week's hypothesis and asks the engine for exactly
+two strings, the hook and the caption; everything else about the day is arithmetic
+already written in this file.
+
+The local writer is a writer, not a placeholder dressed up as a result: HOOK_FRAMES,
+CAPTION_ASKS and CAPTION_TAILS build a complete sentence around her own words for what
+she films, the day's number picks which frame, and copy_origin is recorded in cost_note
+so the page says plainly whether the line came from a model or from here. The limits are
+hard - BANNED_HASHTAGS are never emitted, MAX_SHOTS is 6 and MAX_SHOT_SECONDS 90, and a
+format over that budget loses its last shots rather than having each one shortened.
+"""
+
 from dataclasses import dataclass
 from datetime import date
 import re

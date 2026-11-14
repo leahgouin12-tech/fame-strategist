@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Phone &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Phone</h1>
+<p class="sub">The engine stays on this laptop &mdash; it is the only thing here with enough memory
+to move a jaw or cut a clip. The phone becomes a window onto it: its own icon, its own
+full-screen window, your camera roll one tap away. Nothing about that puts a single file on
+anyone's server.</p>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+
+<div class="grid">
+  <div class="card">
+    <h2>Type this on the phone</h2>
+    {% if addresses %}
+    {% for a in addresses %}
+    <p class="claim"><code>http://{{ a }}:{{ port }}/today</code></p>
+    {% endfor %}
+    <p class="k">More than one line means more than one network card. Start with the first;
+      if the phone spins, try the next.</p>
+    {% else %}
+    <p class="claim">This laptop is not joined to a network right now, so there is no address
+      to hand a phone. Join your wifi or your phone's hotspot first.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Once, in Safari</h2>
+    <ol class="shots">
+      <li>Type the address above and enter your PIN.</li>
+      <li>Tap the <strong>Share</strong> square at the bottom of Safari.</li>
+      <li><strong>Add to Home Screen</strong> &rarr; name it <em>Fame</em>.</li>
+      <li>Open it from the home screen. No address bar, no tabs, its own icon.</li>
+    </ol>
+    <p class="k">The PIN is remembered, so this is a one-time set of taps.</p>
+  </div>
+
+  <div class="card">
+    <h2>Your PIN</h2>
+    {% if local %}
+      {% if status.has_pin %}
+      <p class="k">A PIN is already set. Type a new one only if you want to change it &mdash;
+        changing it locks every phone that is already in.</p>
+      {% else %}
+      <p class="k">Nothing outside this laptop can see a single page until you set one. That is
+        on purpose: a wifi address is also your neighbour's address.</p>
+      {% endif %}
+      <form method="post" action="/phone/pin">
+        <p><input type="text" name="pin" inputmode="text" autocomplete="off"
+                  placeholder="{{ pin_range[0] }} to {{ pin_range[1] }} characters, no spaces"></p>
+        <p><button type="submit" class="btn">{{ 'Change the PIN' if status.has_pin else 'Set the PIN' }}</button></p>
+      </form>
+      <p class="row">
+        <span class="chip {{ 'post' if status.has_pin else 'skip' }}">
+          {{ 'set' if status.has_pin else 'not set' }}</span>
+        <span class="chip">{{ status.devices }} phone{{ 's' if status.devices != 1 else '' }} in</span>
+        {% if status.locked %}<span class="chip fix">waiting {{ status.locked_minutes }} min</span>{% endif %}
+      </p>
+      {% if status.devices %}
+      <form method="post" action="/phone/lock">
+        <p><button type="submit" class="ghost">Lock every phone</button></p>
+      </form>
+      {% endif %}
+    {% else %}
+      <p class="k">You are looking at this from the phone, so the PIN box lives on the laptop:
+        open <code>http://127.0.0.1:{{ port }}/phone</code> there and set it.</p>
+      <p class="row"><span class="chip {{ 'post' if status.has_pin else 'skip' }}">
+        {{ 'set' if status.has_pin else 'not set' }}</span></p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>If the phone reaches nothing</h2>
+    <p class="k">Windows blocks incoming connections by default, and a phone hotspot counts as
+      a public network. Allow this port once, in a PowerShell that says
+      <em>Run as administrator</em>:</p>
+    <p><code>netsh advfirewall firewall add rule name="Fame Strategist" dir=in action=allow
+      protocol=TCP localport={{ port }} profile=any</code></p>
+    <p class="k">The laptop has to stay awake and on the same network as the phone. Let it
+      sleep and the icon opens a page that cannot load &mdash; that is the trade for the files
+      never leaving this machine.</p>
+  </div>
+</div>
+
+<div class="need">
+  <strong>What this is not.</strong> It is not an app you can use on a plane, and not one that
+  works with the laptop closed: the picture work happens here, so this is a remote control with
+  an icon. The PIN is a door on your own network, not a login system &mdash; five wrong guesses
+  bring {{ cooldown }} minutes of waiting, and only you can change the PIN, from this page, on
+  this laptop. Nothing is sent anywhere except from the phone to this machine.
+</div>
+{% endblock %}

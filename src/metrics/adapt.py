@@ -1,3 +1,18 @@
+"""Turning an imported metrics table into verbs, with a floor under it.
+
+analyse reads the rows against the plan and returns Adjustments of kind adjust, stop,
+amplify or hold, each stating its own reason in numbers and carrying the last week's
+focus_entry_ids as evidence. Three constants do the deciding: DATA_FLOOR of 8 posts,
+WEAK_WATCH_PCT of 15 percent held, and STRONG_FOLLOW_RATE of 10 follows per 1000 views,
+with amplify firing only when the best hypothesis converts at AMPLIFY_RATIO times the
+worst across at least two hypotheses.
+
+Below eight rows it returns one insufficient_data adjustment and stops; apply has no
+branch for that kind, so the plan comes back unchanged. apply rewrites only the final
+week and never a week before it, because a week she already lived is evidence, not a
+draft.
+"""
+
 from dataclasses import dataclass, replace
 from statistics import median
 

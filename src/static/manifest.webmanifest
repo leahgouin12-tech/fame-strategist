@@ -6,8 +6,8 @@
   "start_url": "/today",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#12121a",
-  "theme_color": "#12141a",
+  "background_color": "#131417",
+  "theme_color": "#131417",
   "icons": [
     {
       "src": "/static/icon-192.png",
@@ -20,6 +20,20 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Edit a photo",
+      "short_name": "Edit",
+      "url": "/photos",
+      "icons": [{ "src": "/static/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today's shot list",
+      "short_name": "Today",
+      "url": "/today",
+      "icons": [{ "src": "/static/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

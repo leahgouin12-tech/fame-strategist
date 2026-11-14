@@ -84,3 +84,23 @@ def test_alt_text_stays_hers_because_the_app_has_not_seen_the_frame():
     for variant in package("room clips", "tutorial-value", DAY, learn(LOWS)):
         assert "Alt text is yours" in variant.alt_prompt
         assert "only you can say what is in the frame" in variant.alt_prompt
+
+
+CANNOT_CLOSE = {"a", "an", "the", "on", "in", "of", "to", "and", "is", "my", "with", "for",
+                "by", "at", "from"}
+
+
+def test_a_shorter_platform_gets_a_shorter_line_not_hers_cut_off_mid_preposition():
+    """X and reels have a smaller word budget than tiktok, and trimming to it used to stop on
+    whatever word fell there - which put "This is what real life looks like on a." in front of
+    her as copy to paste. The budget still holds; the line has to end somewhere a person would
+    have stopped."""
+    for hypothesis in ("lifestyle-day-in-life", "outfit-and-style", "tutorial-value",
+                       "relatable-comedy"):
+        for variant in package("street clips", hypothesis, DAY, learn(LOWS)):
+            for line in (variant.hook, variant.caption):
+                words = line.rstrip(".!?,;:").split()
+                assert words and words[-1].lower() not in CANNOT_CLOSE, \
+                    f"{hypothesis}/{variant.platform} ends on a word that cannot close a line: " \
+                    f"{line!r}"
+            assert len(variant.hook.split()) <= PLATFORM_RULES[variant.platform]["words"]

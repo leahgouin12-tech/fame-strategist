@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 FORBIDDEN = [
     "auto_follow", "autofollow", "unfollow", "send_dm", "buy_followers", "purchase_followers",
-    "public_url", "instaloader", "snscrape", "selenium", "playwright", "cookie", "sessionid",
+    "public_url", "instaloader", "snscrape", "selenium", "playwright",
+    "sessionid", "cookiejar", "cookies.sqlite", "browsercookie", "appstate",
 ]
 
 
@@ -31,9 +32,31 @@ def test_nothing_is_uploaded_to_a_publicly_fetchable_address():
     assert not offenders, f"only the model endpoint may be hardcoded: {offenders}"
 
 
-def test_the_server_never_binds_outside_localhost():
-    assert "0.0.0.0" not in source_text()
-    assert 'host="127.0.0.1"' in (ROOT / "run.py").read_text(encoding="utf-8")
+def test_the_server_reaches_a_phone_without_reaching_the_internet():
+    """This rule used to read "loopback only", which is also "no phone, ever", and a phone
+    cannot knock on a loopback. What must still never happen is that something from outside
+    the laptop reads a page or a file without answering first - so the socket may open wider,
+    but only with a door standing in front of it. run.py owns the socket; src/app.py is
+    required to own the doorway."""
+    launcher = (ROOT / "run.py").read_text(encoding="utf-8")
+    assert 'HOST = "0.0.0.0"' in launcher and "host=HOST" in launcher
+    assert "127.0.0.1" in launcher, "the laptop still opens the address it has always known"
+    app_src = (SRC / "app.py").read_text(encoding="utf-8")
+    assert "phone_door" in app_src and "net.is_foreign" in app_src, \
+        "a wifi listener with no door in front of it is a leak, not a feature"
+    assert "0.0.0.0" not in source_text(), "only run.py decides what to listen on"
+
+
+def test_the_phone_cookie_is_hers_and_not_a_scraped_login():
+    """The bare word "cookie" was on the forbidden list because a cookie in this codebase
+    used to mean somebody had lifted a platform login. One exists now on purpose - the local
+    door for her own phone - so the guardrail checks the shape of it instead of the spelling,
+    and still refuses any code that reads stored logins."""
+    both = (SRC / "net.py").read_text(encoding="utf-8") + (SRC / "app.py").read_text(encoding="utf-8")
+    assert 'COOKIE = "fame_phone"' in both, "one cookie, named here, and no other"
+    assert "httponly=True" in both and 'samesite="lax"' in both
+    assert not re.search(r"cookiejar|HTTPCookieProcessor|browsercookie|\.cookies\[", both), \
+        "reading somebody's saved logins is still exactly what this guardrail is for"
 
 
 def test_the_app_admits_it_cannot_promise_growth():

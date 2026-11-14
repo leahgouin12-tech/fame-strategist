@@ -9,8 +9,7 @@
     {% if judged %}
     {% set worst = judged.components | sort(attribute='score') %}
     <p class="k">score <span class="big">{{ judged.score }}</span> / 10 &middot; {{ judged.band }}
-      {% for c in worst[0:3] %}
-      &middot; {{ c.name }} {{ (c.score * 10) | round(1) }}{% endfor %}</p>
+      {% for c in worst[0:3] %}&middot; {{ c.name }} {{ (c.score * 10) | round(1) }}{% endfor %}</p>
     {% endif %}
   </div>
   <a class="btn ghost" href="/photos">Back to the inbox</a>
@@ -18,123 +17,208 @@
 
 {% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
 
-<div class="editor">
-  <div class="stagewrap">
+<div class="studio">
+  <nav class="rails" aria-label="Tools">
+    {% for rail in rail_names %}
+    <button type="button" class="rail{% if loop.first %} on{% endif %}" data-rail="{{ rail }}">
+      {{ titles[rail] }}</button>
+    {% endfor %}
+  </nav>
+
+  <section class="stagecol">
     <div class="stage" id="stage">
       <img id="shot" src="/edit/preview?name={{ rel | urlencode }}&ops=%5B%5D" alt="{{ file_name }}">
-      <div id="dots"></div>
+      <div class="marks" id="marks"></div>
+      <div class="brushring" id="brushring" hidden></div>
     </div>
-    <div class="row">
+    <div class="row stagebar">
       <button type="button" class="btn ghost" id="compare">Hold to see the original</button>
-      <button type="button" class="btn ghost" id="reset">Reset everything</button>
+      <button type="button" class="btn ghost" id="undo">Undo last stroke</button>
+      <button type="button" class="btn ghost" id="reset">Start over</button>
       <span class="k" id="status">Nothing applied yet.</span>
     </div>
-    <p class="k">Tap the picture while <em>heal</em> or <em>focus</em> is chosen below.
-      The preview is a smaller copy so it stays fast; the save runs at full size.</p>
-  </div>
-
-  <div class="controls">
-    <div class="row chipset">
-      <button type="button" class="chip on" data-mode="adjust">adjust</button>
-      <button type="button" class="chip" data-mode="heal">heal &mdash; tap to remove</button>
-      <button type="button" class="chip" data-mode="focus">focus &mdash; tap the point</button>
+    <div class="looks">
+      <span class="k">Looks</span>
+      {% for name, recipe in presets.items() %}
+      <button type="button" class="chip" data-preset="{{ name }}">{{ name }}</button>
+      {% endfor %}
+      <button type="button" class="chip" data-preset="">clear look</button>
     </div>
+    <p class="k">The preview is a smaller copy so it stays quick; the save runs the same edit
+      list on the full-size original. Nothing here overwrites the file you started with.</p>
+  </section>
 
-    <div class="card">
-      <p class="k"><strong>Look</strong> &mdash; a starting point; every control under it still moves</p>
-      <div class="row chipset">
-        {% for name, recipe in presets.items() %}
-        <button type="button" class="chip" data-preset="{{ name }}">{{ name }}</button>
-        {% endfor %}
-        <button type="button" class="chip" data-preset="">clear look</button>
+  <aside class="panel">
+    {% for rail in rail_names %}
+    <div class="railbox{% if not loop.first %} hide{% endif %}" data-rail="{{ rail }}">
+      {% if rail == 'frame' %}
+      <div class="tool plain">
+        <p class="tl">Ratio and mirror</p>
+        <div class="row chipset" id="ratios">
+          <button type="button" class="chip on" data-ratio="">original</button>
+          {% for label, ratio in [('9:16', 0.5625), ('4:5', 0.8), ('1:1', 1.0), ('16:9', 1.7778), ('3:4', 0.75)] %}
+          <button type="button" class="chip" data-ratio="{{ ratio }}">{{ label }}</button>
+          {% endfor %}
+        </div>
+        <label class="ctl switch"><span>Mirror</span>
+          <input type="checkbox" id="flip"> <output>off</output></label>
       </div>
-    </div>
+      {% endif %}
 
-    <div class="card">
-      <p class="k"><strong>Frame</strong></p>
-      <div class="row chipset" id="ratios">
-        <button type="button" class="chip on" data-ratio="">original</button>
-        {% for label, ratio in [('9:16', 0.5625), ('4:5', 0.8), ('1:1', 1.0), ('16:9', 1.7778), ('3:4', 0.75)] %}
-        <button type="button" class="chip" data-ratio="{{ ratio }}">{{ label }}</button>
-        {% endfor %}
-      </div>
-      {% for op in sliders if op.group == 'frame' %}
-      <label class="ctl"><span>{{ op.label }}</span>
-        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}" step="{{ op.step }}" value="0">
-        <output>0{{ op.unit }}</output></label>
+      {% for tool in rails[rail] %}
+      <details class="tool" data-op="{{ tool.op }}"{% if tool.stroke %} data-stroke="1"{% endif %}>
+        <summary><span class="tl">{{ tool.label }}</span>
+          <span class="count" data-count></span></summary>
+        <div class="fields">
+          {% for f in tool.fields %}
+          {% if f.options %}
+          <label class="ctl pick"><span>{{ f.label }}</span>
+            <select data-at="{{ f.at }}" data-kind="choice" data-value="{{ f.value }}">
+              {% for o in f.options %}<option value="{{ loop.index0 }}">{{ o }}</option>{% endfor %}
+            </select></label>
+          {% elif f.kind == 'colour' %}
+          <label class="ctl pick"><span>{{ f.label }}</span>
+            <input type="color" data-at="{{ f.at }}" data-kind="colour" data-value="{{ f.value }}"></label>
+          {% elif f.kind == 'text' %}
+          <label class="ctl word"><span>{{ f.label }}</span>
+            <textarea rows="2" data-at="{{ f.at }}" data-kind="text"
+              placeholder="the words themselves"></textarea></label>
+          {% elif f.kind == 'file' %}
+          <label class="ctl pick"><span>{{ f.label }}</span>
+            <select data-at="{{ f.at }}" data-kind="file" data-value="">
+              <option value="">&mdash; nothing &mdash;</option>
+              {% for n in files %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+            </select></label>
+          {% elif f.kind == 'switch' %}
+          <label class="ctl switch"><span>{{ f.label }}</span>
+            <input type="checkbox" data-at="{{ f.at }}" data-kind="switch" data-value="{{ f.value }}"></label>
+          {% else %}
+          <label class="ctl"><span>{{ f.label }}</span>
+            <input type="range" data-at="{{ f.at }}" data-kind="slider" data-unit="{{ f.unit }}"
+              data-value="{{ f.value }}" min="{{ f.lo }}" max="{{ f.hi }}" step="{{ f.step }}"
+              value="{{ f.value }}">
+            <output>0{{ f.unit }}</output></label>
+          {% if f.hint %}<p class="k tiny">{{ f.hint }}</p>{% endif %}
+          {% endif %}
+          {% endfor %}
+        </div>
+        <p class="k tip">{% if tool.stroke %}Click the picture to place it. {% endif %}{{ tool.note }}</p>
+      </details>
       {% endfor %}
-      <label class="ctl"><span>mirror</span>
-        <input type="checkbox" id="flip"> <output>off</output></label>
-      <label class="ctl" data-only="heal"><span>heal size</span>
-        <input type="range" id="brush" min="0.01" max="0.12" step="0.005" value="0.03">
-        <output id="brushout">0.03</output></label>
-      <p class="k">Heal borrows the texture around a spot &mdash; a stray hair, a bin, a
-        reflection. It is capped at {{ '%.2f' | format(0.12) }} of the short edge, so it cannot
-        repaint a person, and it does not fill a region the way a generative tool would.</p>
     </div>
+    {% endfor %}
 
-    <div class="card">
-      <p class="k"><strong>Tone</strong></p>
-      {% for op in sliders if op.group == 'tone' %}
-      <label class="ctl"><span>{{ op.label }}</span>
-        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}" step="{{ op.step }}" value="0">
-        <output>0{{ op.unit }}</output></label>
-      {% if op.note %}<p class="k tiny">{{ op.note }}</p>{% endif %}
-      {% endfor %}
-    </div>
-
-    <div class="card">
-      <p class="k"><strong>Lens</strong> &mdash; soften everything except the point you tapped</p>
-      {% for op in sliders if op.group == 'lens' %}
-      <label class="ctl"><span>{{ op.label }}</span>
-        <input type="range" data-op="{{ op.name }}" min="{{ op.lo }}" max="{{ op.hi }}" step="{{ op.step }}" value="0">
-        <output>0{{ op.unit }}</output></label>
-      {% endfor %}
-      <label class="ctl"><span>feather</span>
-        <input type="range" id="feather" min="0.05" max="1" step="0.05" value="0.45">
-        <output id="featherout">0.45</output></label>
-    </div>
-
-    <form method="post" action="/edit/save" class="card saveform">
+    <form method="post" action="/edit/save" class="saveform">
       <input type="hidden" name="name" value="{{ rel }}">
       <input type="hidden" name="recipe" id="recipe" value="[]">
+      <p class="k"><strong>In this edit</strong></p>
+      <ul class="ledger" id="ledger"><li class="k">nothing yet</li></ul>
       <div class="row">
         <button type="submit" class="btn">Save a copy</button>
         <label class="k">as
-          <select name="format" id="format">
+          <select name="format">
             <option value="jpg">jpg &mdash; smaller, good for posting</option>
-            <option value="png">png &mdash; no extra compression</option>
-          </select>
-        </label>
+            <option value="png">png &mdash; keeps transparency</option>
+          </select></label>
       </div>
-      <p class="k">The edit list is saved beside the copy, so opening it again brings your
-        sliders back and re-runs them on the full-size original instead of on a compressed result.</p>
+      <p class="k">This list is saved beside the copy, so reopening it brings the sliders and
+        every stroke back and re-runs them on the full-size original instead of on a
+        compressed result.</p>
     </form>
-
-    <div class="need"><strong>What this will not do.</strong> No face slimming, no body
-      reshaping, no skin smoothing, no generated pixels. Those change how a person looks, and
-      this app was built to the rule that it does not offer that. Everything above moves or
-      brightens what your camera already recorded, or borrows texture a few pixels away.</div>
-  </div>
+  </aside>
 </div>
 
 <script>
+const RAILS = {{ tools_json | safe }};
+const TOOLS = {};
+RAILS.forEach(r => r.tools.forEach(t => {
+  t.arity = t.arity || 1;
+  t.points = t.points || [0, 1];
+  t.repeats = t.repeats !== false;
+  TOOLS[t.op] = t;
+}));
 const NAME = "{{ rel | urlencode }}";
 const PRESETS = {{ presets_json | safe }};
-const tone = {};
-let rotate = 0, crop = null, flip = 0, spots = [], lens = { v: 0, x: 0.5, y: 0.5, f: 0.45 };
-let mode = "adjust";
-const shot = document.getElementById("shot"), status = document.getElementById("status");
+const shot = document.getElementById("shot");
+const statusEl = document.getElementById("status");
+const marks = document.getElementById("marks");
+
+// One record per control. Painted tools keep a list of strokes, each holding its own copy
+// of the values, because "the cheek at 0.4 and the forehead at 0.2" is one sentence she
+// should be able to say without starting the frame over.
+const state = {};
+let crop = null, flip = 0, active = null;
+
+function field(op, at) { return TOOLS[op].fields.find(f => f.at === at); }
+function defaults(op) {
+  const out = {};
+  TOOLS[op].fields.forEach(f => { out[f.at] = f.value; });
+  return out;
+}
+function current(op) {
+  return state[op] || (state[op] = { vals: {}, strokes: [], sel: -1, ready: {} });
+}
+function bag(op) {
+  const s = current(op);
+  if (TOOLS[op].stroke && s.strokes.length) return (s.strokes[s.sel] || s.strokes[s.strokes.length - 1]).v;
+  return TOOLS[op].stroke ? s.ready : s.vals;
+}
+function setVal(op, at, value) { bag(op)[at] = value; }
+
+function group(op, vals, x, y) {
+  const t = TOOLS[op], out = new Array(t.arity).fill(0);
+  t.fields.forEach(f => {
+    const v = vals[f.at] !== undefined ? vals[f.at] : f.value;
+    if (f.kind === "colour") {
+      const hex = String(v).replace("#", "");
+      out[f.at] = parseInt(hex.slice(0, 2), 16) / 255;
+      out[f.at + 1] = parseInt(hex.slice(2, 4), 16) / 255;
+      out[f.at + 2] = parseInt(hex.slice(4, 6), 16) / 255;
+    } else if (f.kind === "text" || f.kind === "file") {
+      out[f.at] = String(v || "");
+    } else {
+      out[f.at] = Number(v) || 0;
+    }
+  });
+  if (t.stroke && x !== undefined) { out[t.points[0]] = x; out[t.points[1]] = y; }
+  return out;
+}
+
+function isDead(g) { return g.every(v => typeof v === "string" ? !v.trim() : Math.abs(Number(v)) < 1e-6); }
 
 function recipe() {
   const r = [];
-  if (rotate) r.push(["rotate", rotate]);
   if (flip) r.push(["flip", 1]);
   if (crop) r.push(["crop", ...crop]);
-  for (const k in tone) if (tone[k]) r.push([k, tone[k]]);
-  if (lens.v) r.push(["lens_blur", lens.v, lens.x, lens.y, lens.f]);
-  if (spots.length) r.push(["heal", ...spots.flatMap(s => [s.x, s.y, s.r])]);
+  for (const op in TOOLS) {
+    const t = TOOLS[op], s = state[op];
+    if (!s) continue;
+    if (t.stroke) {
+      if (!s.strokes.length) continue;
+      r.push([op, ...s.strokes.flatMap(st => group(op, st.v, st.x, st.y))]);
+    } else {
+      const g = group(op, s.vals);
+      if (isDead(g)) continue;
+      r.push([op, ...g]);
+    }
+  }
   return r;
+}
+
+function paintLedger(r) {
+  const list = document.getElementById("ledger");
+  list.innerHTML = "";
+  if (!r.length) {
+    list.append(Object.assign(document.createElement("li"), { textContent: "nothing yet", className: "k" }));
+    return;
+  }
+  r.forEach(e => {
+    const t = TOOLS[e[0]];
+    const li = document.createElement("li");
+    const n = t && t.stroke ? (e.length - 1) / t.arity : 1;
+    li.innerHTML = `<b>${(t && t.label) || e[0]}</b>` + (n > 1 ? `<span class="k"> &nbsp;${n} strokes</span>` : "");
+    list.append(li);
+  });
 }
 
 let timer = null;
@@ -143,53 +227,140 @@ function refresh(word) {
   timer = setTimeout(() => {
     const r = recipe();
     document.getElementById("recipe").value = JSON.stringify(r);
+    paintLedger(r);
     shot.src = `/edit/preview?name=${NAME}&ops=${encodeURIComponent(JSON.stringify(r))}&t=${Date.now()}`;
-    status.textContent = r.length ? `${r.length} control group${r.length > 1 ? "s" : ""} applied.`
-                                  : "Nothing applied yet.";
-    if (word) status.textContent = word;
-  }, 180);
+    statusEl.textContent = word || (r.length ? `${r.length} control${r.length > 1 ? "s" : ""} applied.`
+                                             : "Nothing applied yet.");
+    drawMarks();
+  }, 220);
 }
 
-document.querySelectorAll("input[data-op]").forEach(el => {
-  el.addEventListener("input", () => {
-    const v = parseFloat(el.value), name = el.dataset.op;
-    el.nextElementSibling.value = `${v}${document.querySelector(`[data-op="${name}"]`).dataset.unit || ""}`;
-    if (name === "rotate") rotate = v;
-    else if (name === "lens_blur") lens.v = v;
-    else tone[name] = v;
-    refresh();
+function fieldEls(op) { return Array.from(document.querySelectorAll(`.tool[data-op="${op}"] [data-at]`)); }
+
+function syncFields(op) {
+  const s = current(op), t = TOOLS[op], box = bag(op);
+  fieldEls(op).forEach(el => {
+    const at = Number(el.dataset.at), kind = el.dataset.kind, f = field(op, at);
+    const raw = box[at] !== undefined ? box[at] : f.value;
+    if (kind === "colour") el.value = /^#/.test(raw) ? raw : greyOf(raw);
+    else if (kind === "slider") {
+      el.value = raw;
+      el.closest(".ctl").querySelector("output").textContent = `${trim(raw)}${el.dataset.unit}`;
+    } else if (kind === "switch") el.checked = Number(raw) > 0.5;
+    else if (kind === "text" || kind === "file") el.value = String(raw || "");
+    else el.value = String(Math.round(Number(raw) || 0));
   });
-});
-document.querySelectorAll("input[data-op]").forEach(el => el.dataset.unit = el.closest(".ctl")
-  .querySelector("output").textContent.replace("0", ""));
+  const count = document.querySelector(`.tool[data-op="${op}"] [data-count]`);
+  if (count) count.textContent = t.stroke && s.strokes.length ? String(s.strokes.length) : "";
+}
+function chan(v) {
+  return Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * 255).toString(16).padStart(2, "0");
+}
+function greyOf(v) { return `#${chan(v)}${chan(v)}${chan(v)}`; }
+function carriedField(f, cell) {
+  // The file stores a colour as three numbers; the picker wants one hex. Reopening an
+  // edit without folding them back hands the picker a number it then reads as a hex.
+  if (cell[f.at] === undefined) return f.value;
+  if (f.kind !== "colour") return cell[f.at];
+  return `#${chan(cell[f.at])}${chan(cell[f.at + 1])}${chan(cell[f.at + 2])}`;
+}
+function trim(v) { return (Math.round(Number(v) * 100) / 100).toString(); }
 
-document.getElementById("flip").addEventListener("change", e => {
-  flip = e.target.checked ? 1 : 0;
-  e.target.nextElementSibling.value = flip ? "left-right" : "off";
-  refresh();
-});
-document.getElementById("brush").addEventListener("input", e => {
-  document.getElementById("brushout").value = e.target.value; });
-document.getElementById("feather").addEventListener("input", e => {
-  lens.f = parseFloat(e.target.value);
-  document.getElementById("featherout").value = e.target.value; refresh(); });
-
-document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
-  mode = b.dataset.mode;
-  document.querySelectorAll("[data-mode]").forEach(x => x.classList.toggle("on", x === b));
-  document.getElementById("stage").classList.toggle("picking", mode !== "adjust");
+document.querySelectorAll(".rail").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".rail").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".railbox").forEach(x => x.classList.toggle("hide", x.dataset.rail !== b.dataset.rail));
 }));
 
-document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => {
-  const preset = PRESETS[b.dataset.preset] || [];
-  for (const k in tone) delete tone[k];
-  document.querySelectorAll("input[data-op]").forEach(el => {
-    if (el.dataset.op !== "rotate" && el.dataset.op !== "lens_blur") { el.value = 0; el.nextElementSibling.value = "0"; }
+document.querySelectorAll(".tool[data-op]").forEach(box => box.addEventListener("toggle", () => {
+  if (!box.open) return;
+  document.querySelectorAll(".tool[data-op]").forEach(x => { if (x !== box) x.open = false; });
+  active = box.dataset.op;
+  syncFields(active);
+  drawMarks();
+  statusEl.textContent = TOOLS[active].stroke
+    ? `${TOOLS[active].label}: click the picture where you want it.`
+    : `${TOOLS[active].label}.`;
+}));
+
+document.querySelectorAll(".tool [data-at]").forEach(el => {
+  const op = el.closest(".tool").dataset.op, at = Number(el.dataset.at), kind = el.dataset.kind;
+  const onInput = () => {
+    if (kind === "slider") setVal(op, at, parseFloat(el.value));
+    else if (kind === "switch") setVal(op, at, el.checked ? 1 : 0);
+    else if (kind === "choice") setVal(op, at, parseFloat(el.value));
+    else setVal(op, at, el.value);
+    if (kind === "slider") el.closest(".ctl").querySelector("output").textContent = `${trim(el.value)}${el.dataset.unit}`;
+    refresh();
+  };
+  el.addEventListener("input", onInput);
+  el.addEventListener("change", onInput);
+});
+
+const ring = document.getElementById("brushring");
+document.getElementById("stage").addEventListener("mousemove", ev => {
+  const t = active && TOOLS[active];
+  if (!t || !t.stroke || !t.fields.some(f => f.label === "brush")) { ring.hidden = true; return; }
+  const box = shot.getBoundingClientRect();
+  const size = Number(bag(active)[2] || 0.06);
+  const w = Math.max(12, size * 2 * Math.min(box.width, box.height));
+  ring.hidden = false;
+  ring.style.width = ring.style.height = `${w}px`;
+  ring.style.left = `${ev.clientX - box.left}px`;
+  ring.style.top = `${ev.clientY - box.top}px`;
+});
+document.getElementById("stage").addEventListener("mouseleave", () => { ring.hidden = true; });
+
+shot.addEventListener("click", ev => {
+  const t = active && TOOLS[active];
+  if (!t || !t.stroke) return;
+  const box = shot.getBoundingClientRect();
+  const x = (ev.clientX - box.left) / box.width, y = (ev.clientY - box.top) / box.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  const s = current(t.op), v = Object.assign({}, s.ready);
+  s.strokes = t.repeats ? s.strokes.concat([{ x, y, v }]) : [{ x, y, v }];
+  s.sel = s.strokes.length - 1;
+  refresh(`${t.label} placed.`);
+});
+
+function drawMarks() {
+  marks.innerHTML = "";
+  if (!active || !TOOLS[active].stroke) return;
+  const s = current(active);
+  s.strokes.forEach((st, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "dot" + (i === s.sel ? " on" : "");
+    b.title = `stroke ${i + 1} - click to edit it`;
+    b.style.left = `${st.x * 100}%`;
+    b.style.top = `${st.y * 100}%`;
+    b.textContent = String(i + 1);
+    b.addEventListener("click", ev => {
+      ev.stopPropagation();
+      s.sel = i;
+      syncFields(active);
+      drawMarks();
+      statusEl.textContent = `${TOOLS[active].label}, stroke ${i + 1} selected.`;
+    });
+    marks.append(b);
   });
-  preset.forEach(([k, v]) => {
-    tone[k] = v;
-    const el = document.querySelector(`input[data-op="${k}"]`);
-    if (el) { el.value = v; el.nextElementSibling.value = `${v}${el.dataset.unit}`; }
+}
+
+document.getElementById("undo").addEventListener("click", () => {
+  if (!active) return;
+  const s = current(active);
+  if (!s.strokes.length) return;
+  s.strokes.pop();
+  s.sel = s.strokes.length - 1;
+  syncFields(active);
+  refresh(`${TOOLS[active].label} undone.`);
+});
+
+document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => {
+  Object.keys(state).forEach(op => { if (!TOOLS[op].stroke) delete state[op]; });
+  (PRESETS[b.dataset.preset] || []).forEach(([op, v]) => {
+    if (!TOOLS[op] || TOOLS[op].stroke) return;
+    current(op).vals = Object.assign(defaults(op), { [TOOLS[op].fields[0].at]: v });
+    syncFields(op);
   });
   refresh(`Look: ${b.dataset.preset || "cleared"}.`);
 }));
@@ -197,58 +368,38 @@ document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("clic
 document.querySelectorAll("#ratios [data-ratio]").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("#ratios [data-ratio]").forEach(x => x.classList.toggle("on", x === b));
   const ratio = parseFloat(b.dataset.ratio);
-  crop = ratio ? [ratio] : null;   // the engine fits the box, so it fits it after straightening
+  crop = ratio ? [ratio] : null;   // the engine fits the box after straightening, so it fits that
   refresh();
 }));
 
-shot.addEventListener("click", ev => {
-  if (mode === "adjust") return;
-  const box = shot.getBoundingClientRect();
-  const x = (ev.clientX - box.left) / box.width, y = (ev.clientY - box.top) / box.height;
-  if (mode === "focus") { lens.x = x; lens.y = y; if (!lens.v) { lens.v = 0.5;
-      document.querySelector('input[data-op="lens_blur"]').value = 0.5; } }
-  else spots.push({ x, y, r: parseFloat(document.getElementById("brush").value) });
-  drawDots(); refresh();
+document.getElementById("flip").addEventListener("change", e => {
+  flip = e.target.checked ? 1 : 0;
+  e.target.closest(".ctl").querySelector("output").textContent = flip ? "left-right" : "off";
+  refresh();
 });
 
-function drawDots() {
-  const wrap = document.getElementById("dots");
-  wrap.innerHTML = "";
-  spots.forEach((s, i) => {
-    const d = document.createElement("button");
-    d.className = "dot"; d.title = "remove this heal";
-    d.style.left = `${s.x * 100}%`; d.style.top = `${s.y * 100}%`;
-    d.style.width = d.style.height = `${s.r * 200}%`;
-    d.addEventListener("click", ev => { ev.stopPropagation(); spots.splice(i, 1); drawDots(); refresh(); });
-    wrap.appendChild(d);
-  });
-  if (lens.v) {
-    const f = document.createElement("span");
-    f.className = "focus"; f.style.left = `${lens.x * 100}%`; f.style.top = `${lens.y * 100}%`;
-    wrap.appendChild(f);
-  }
-}
-
 const hold = document.getElementById("compare");
-let original = false;
+let showing = false;
 function compare(on) {
-  if (on === original) return;
-  original = on;
+  if (on === showing) return;
+  showing = on;
   shot.src = on ? `/edit/preview?name=${NAME}&ops=%5B%5D`
                 : `/edit/preview?name=${NAME}&ops=${encodeURIComponent(JSON.stringify(recipe()))}`;
-  status.textContent = on ? "The original, unedited." : "Your edit.";
+  statusEl.textContent = on ? "The original, untouched." : "Your edit.";
 }
 ["mousedown", "touchstart"].forEach(e => hold.addEventListener(e, ev => { ev.preventDefault(); compare(true); }));
 ["mouseup", "mouseleave", "touchend"].forEach(e => hold.addEventListener(e, () => compare(false)));
 
 document.getElementById("reset").addEventListener("click", () => {
-  for (const k in tone) delete tone[k];
-  rotate = 0; crop = null; flip = 0; spots = []; lens = { v: 0, x: 0.5, y: 0.5, f: 0.45 };
-  document.querySelectorAll("input[data-op]").forEach(el => { el.value = 0; el.nextElementSibling.value = "0"; });
+  Object.keys(state).forEach(op => delete state[op]);
+  crop = null;
+  flip = 0;
   document.getElementById("flip").checked = false;
-  document.getElementById("flip").nextElementSibling.value = "off";
+  document.getElementById("flip").closest(".ctl").querySelector("output").textContent = "off";
   document.querySelectorAll("#ratios [data-ratio]").forEach(x => x.classList.toggle("on", !x.dataset.ratio));
-  drawDots(); refresh("Reset.");
+  document.querySelectorAll(".tool[data-op]").forEach(b => syncFields(b.dataset.op));
+  drawMarks();
+  refresh("Reset.");
 });
 
 document.querySelector("form.saveform").addEventListener("submit", () => {
@@ -258,21 +409,44 @@ document.querySelector("form.saveform").addEventListener("submit", () => {
 (() => {
   const carried = {{ recipe_json | safe }};
   carried.forEach(entry => {
-    const [name, ...args] = entry;
-    if (name === "rotate") { rotate = args[0]; }
-    else if (name === "flip") { flip = 1; document.getElementById("flip").checked = true;
-      document.getElementById("flip").nextElementSibling.value = "left-right"; }
-    else if (name === "crop") { crop = args;
+    const [op, ...args] = entry;
+    if (op === "flip") {
+      flip = 1;
+      document.getElementById("flip").checked = true;
+      document.getElementById("flip").closest(".ctl").querySelector("output").textContent = "left-right";
+      return;
+    }
+    if (op === "crop") {
+      crop = args;
       document.querySelectorAll("#ratios [data-ratio]").forEach(x =>
-        x.classList.toggle("on", args.length === 1 && Math.abs(parseFloat(x.dataset.ratio) - args[0]) < 0.005)); }
-    else if (name === "heal") { for (let i = 0; i < args.length; i += 3) spots.push({ x: args[i], y: args[i + 1], r: args[i + 2] }); }
-    else if (name === "lens_blur") { lens = { v: args[0], x: args[1], y: args[2], f: args[3] || 0.45 }; }
-    else tone[name] = args[0];
-    const el = document.querySelector(`input[data-op="${name}"]`);
-    if (el) { el.value = args[0]; el.nextElementSibling.value = `${args[0]}${el.dataset.unit}`; }
+        x.classList.toggle("on", args.length === 1 && Math.abs(parseFloat(x.dataset.ratio) - args[0]) < 0.005));
+      return;
+    }
+    const t = TOOLS[op];
+    if (!t) return;
+    const s = current(op);
+    if (t.stroke) {
+      for (let i = 0; i + t.arity <= args.length; i += t.arity) {
+        const cell = args.slice(i, i + t.arity), v = {};
+        t.fields.forEach(f => { v[f.at] = carriedField(f, cell); });
+        s.strokes.push({ x: cell[t.points[0]], y: cell[t.points[1]], v });
+      }
+      s.sel = s.strokes.length - 1;
+      if (s.strokes.length) s.ready = Object.assign({}, s.strokes[s.sel].v);
+    } else {
+      t.fields.forEach(f => { s.vals[f.at] = carriedField(f, args); });
+    }
+    syncFields(op);
   });
-  drawDots();
-  if (carried.length) refresh("Your saved edit, re-run on this file.");
+  if (carried.length) {
+    const first = carried.find(e => TOOLS[e[0]]);
+    if (first) {
+      const box = document.querySelector(`.tool[data-op="${first[0]}"]`);
+      if (box) { active = first[0]; box.open = true; }
+    }
+    refresh("Your saved edit, re-run on this file.");
+  }
+  drawMarks();
 })();
 </script>
 {% endblock %}

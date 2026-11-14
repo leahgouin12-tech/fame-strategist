@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}The lab &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>The lab</h1>
+<p class="sub">Your plan spends weeks one to four testing one hypothesis at a time. A test is
+only a test when something writes down which side each post was on and what the two sides did
+&mdash; so this page holds the arms, and the verdict they earn.</p>
+<p class="k">Nothing here reads a platform. Every figure is built from the three numbers you
+type on the numbers page, grouped by the week they were filed in. When there are not enough
+posts to call it, this page says so instead of picking a winner.</p>
+
+{% if note %}<p class="k"><strong>{{ note }}</strong></p>{% endif %}
+
+<div class="card">
+  <p class="k">The test running now{% if week %} &mdash; week {{ week.week_no }} of
+    {{ week.total }}{% endif %}</p>
+  {% if week %}
+  <p class="claim">{{ arm or "This week names no hypothesis." }}</p>
+  <p class="k">What would count: {{ week.success_test }}</p>
+  {% else %}
+  <p class="claim">No plan yet, so nothing has an arm to belong to.</p>
+  <p class="k">The eight weeks are what name the hypotheses this page can compare.
+    <a href="/plan">Build the plan</a> and the arms appear here by themselves.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <p class="k">The verdict</p>
+  <div class="row">
+    <span class="chip {{ 'post' if verdict.state == 'called' else
+                        ('fix' if verdict.state in ('flat', 'thin') else 'skip') }}">
+      {{ verdict.state }}</span>
+    <span class="big">{{ verdict.headline }}</span>
+  </div>
+  {% for line in verdict.lines %}<p class="k">{{ line }}</p>{% endfor %}
+  {% if verdict.missing %}
+  <p class="limit"><strong>Still needed:</strong> {{ verdict.missing }}</p>
+  {% endif %}
+  {% if verdict.decided %}
+  <form method="post" action="/lab/decide" class="row" style="margin-top:14px">
+    <input type="hidden" name="winner" value="{{ verdict.winner }}">
+    <input type="hidden" name="loser" value="{{ verdict.loser }}">
+    <button type="submit">Write this into memory</button>
+    <span class="k">It keeps the decision and the numbers behind it, so a later week cannot
+      quietly re-run the arm you dropped.</span>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  <p class="k">The arms &mdash; {{ got.labelled }} labelled post{{ '' if got.labelled == 1 else 's' }}
+    across {{ got.arms | length }} arm{{ '' if got.arms | length == 1 else 's' }}{% if got.unlabelled %},
+    {{ got.unlabelled }} still unlabelled{% endif %}</p>
+  {% if got.arms %}
+  <table class="tbl">
+    <tr><th>arm</th><th>posts</th><th>follows per 1000 views</th><th>median watch</th><th>which posts</th></tr>
+    {% for a in got.arms %}
+    <tr>
+      <td>{{ a.label }}</td>
+      <td>{{ a.n }}</td>
+      <td>{{ a.rate_text }}</td>
+      <td>{{ a.watch }}%</td>
+      <td class="tiny">{{ a.refs | join(", ") }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k tiny">The top arm is the one converting best on the posts filed under it &mdash;
+    not a promise about the next post.</p>
+  {% else %}
+  <p class="big">&mdash;</p>
+  <p class="k">No post in your stored numbers carries a hypothesis yet.</p>
+  {% endif %}
+  {% if arm and got.unlabelled %}
+  <form method="post" action="/lab/tag" class="row" style="margin-top:14px">
+    <input type="hidden" name="arm" value="{{ arm }}">
+    <button type="submit">File the unlabelled ones under this week</button>
+    <span class="k">Only the rows with no arm are touched. A post you already labelled keeps
+      the label you gave it, because that is what it was actually run under.</span>
+  </form>
+  {% endif %}
+</div>
+
+{% if decisions %}
+<div class="card">
+  <p class="k">Decisions this lab has already written down</p>
+  <table class="tbl">
+    <tr><th>when</th><th>what it remembered</th></tr>
+    {% for d in decisions %}
+    <tr><td class="tiny">{{ d.seen_at }}</td><td>{{ d.body }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<p class="limit"><strong>What this is not:</strong> a two-arm test needs both arms run on
+purpose. If every post so far carries the same label, this page will keep saying
+&ldquo;one arm is a habit, not a test&rdquo; until you file posts under the alternative
+&mdash; and that is the honest answer, not a page that has not loaded.</p>
+{% endblock %}

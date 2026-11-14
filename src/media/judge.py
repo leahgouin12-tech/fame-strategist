@@ -106,7 +106,7 @@ class Reading:
                     "your own shots, not a platform rule.")
         if self.verdict == "fix":
             return ("Tone and crop only. Areas that are already pure white or pure black have no "
-                    "data left to recover, and nothing here changes your face, skin or body.")
+                    "data left to recover - the rest of the studio is yours from there.")
         if self.verdict == "post":
             return ("Nothing here is a promise about performance. It says the file is clean and "
                     "square, not that it will work.")

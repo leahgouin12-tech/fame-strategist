@@ -1,3 +1,17 @@
+"""The playbook on disk - markdown with front matter - and the reading of it.
+
+_parse splits a file on its --- fences and takes id, confidence, as_of, applies_to, tags
+and does_not_claim from the front matter, claim: and mechanism: from the body, and each
+"- url | title | tier" line under sources:, which is a hand-written reader rather than a
+YAML dependency. Store.load walks a directory of .md files, collects every parse
+complaint beside every validate_entry problem, and raises PlaybookError listing all of
+them instead of handing back the entries that happened to be well-formed; a placeholder
+source is refused the same way unless allow_pending is passed.
+
+An entry with a broken citation cannot be advised around quietly, so the whole load
+fails. by_id is only reached over a list that survived that.
+"""
+
 from datetime import date
 from pathlib import Path
 

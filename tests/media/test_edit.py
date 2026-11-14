@@ -1,4 +1,5 @@
 import json
+import random
 
 import pytest
 from PIL import Image, ImageChops, ImageDraw
@@ -20,6 +21,14 @@ def frame():
 def changed_fraction(im, out):
     hist = ImageChops.difference(im, out).convert("L").histogram()
     return sum(hist[3:]) / (im.width * im.height)
+
+
+def mean_error(im, out):
+    """How far the pixels moved, not how many. A hard edge only needs a few levels left
+    behind to still count as changed, so a count alone cannot tell an undo that worked
+    from an undo that only softened the bend."""
+    hist = ImageChops.difference(im, out).convert("L").histogram()
+    return sum(i * hist[i] for i in range(1, 256)) / (im.width * im.height)
 
 
 @pytest.mark.parametrize("op", SLIDERS, ids=[op.name for op in SLIDERS])
@@ -52,16 +61,19 @@ def test_an_unknown_control_is_dropped_rather_than_run():
     assert normalize([["face_slim", 0.9], ["skin_smooth", 1], ["nonsense"]]) == []
 
 
-FORBIDDEN = ("slim", "reshape", "warp", "liquify", "smooth", "skin", "face", "body",
-             "plump", "enlarge", "teeth", "eye", "waist", "leg", "generative", "inpaint")
+def test_a_one_lever_control_reaches_the_picture_it_was_switched_on_for():
+    """The no-op test used to start reading from the second argument, which threw away
+    every control whose only lever is its first one - auto, enlarge, vibrance, clarity -
+    with the page still showing the number she set."""
+    for name, value in (("auto", 0.75), ("upscale", 3.0), ("vibrance", 0.5), ("clarity", 0.4),
+                        ("invert", 1.0), ("posterize", 4.0)):
+        got = normalize([[name, value]])
+        assert got and got[0][0] == name, f"{name} was dropped before it ran"
+        assert got[0][1] == pytest.approx(value)
 
 
-def test_no_operation_can_reshape_or_resmooth_a_person():
-    """The app's own rule, as a test: an edit that changes how she looks is not offered."""
-    names = " ".join(edit.APPLIERS)
-    for word in FORBIDDEN:
-        assert word not in names, f"{word} would change how a person looks"
-    assert {edit.OPS[n].group for n in edit.APPLIERS} <= {"frame", "tone", "lens", "heal"}
+def test_a_one_lever_control_left_at_zero_is_still_no_work():
+    assert normalize([["vibrance", 0.0], ["auto", 0.0], ["invert", 0.0]]) == []
 
 
 def test_a_heal_cannot_cover_more_than_a_blemish():
@@ -69,6 +81,85 @@ def test_a_heal_cannot_cover_more_than_a_blemish():
     out = apply(im, [["heal", 0.5, 0.5, 0.9]])  # she asks for a huge patch
     assert changed_fraction(im, out) < 0.12, MAX_SPOT
     assert out.getpixel((8, 8)) == im.getpixel((8, 8))
+
+
+def speckled():
+    """A frame with real high-frequency detail, because a smoothing brush run over a flat
+    colour changes nothing and would let an undo brush pass every test by doing nothing."""
+    random.seed(11)
+    return Image.effect_noise(SIZE, 46).convert("RGB")
+
+
+def test_the_undo_brush_uncovers_the_skin_the_smudge_covered():
+    im = speckled()
+    grade = [["exposure", 0.2]]
+    flat = apply(im, grade)
+    smoothed = apply(im, grade + [["smooth", 0.5, 0.5, 0.24, 1.0]])
+    undone = apply(im, grade + [["smooth", 0.5, 0.5, 0.24, 1.0], ["restore", 0.5, 0.5, 0.24]])
+    centre = (300, 450)
+    took = changed_fraction(flat, smoothed)          # what the smudge changed
+    gave = changed_fraction(smoothed, undone)        # what the undo gave back
+    assert took > 0.01, "the smudge did nothing for the undo to do"
+    assert sum(undone.getpixel(centre)) != sum(smoothed.getpixel(centre)), "the undo did nothing"
+    assert undone.getpixel(centre) == flat.getpixel(centre), "it uncovered the pre-brush frame"
+    assert gave > 0.8 * took, f"the undo only reached {gave:.3f} of the {took:.3f} she smudged"
+    assert changed_fraction(im, undone) > 0.5, "and the grade is still on the picture"
+
+
+def test_the_undo_brush_leaves_everything_outside_its_stroke_alone():
+    im = speckled()
+    smoothed = apply(im, [["smooth", 0.5, 0.5, 0.24, 1.0]])
+    undone = apply(im, [["smooth", 0.5, 0.5, 0.24, 1.0], ["restore", 0.5, 0.5, 0.16]])
+    for spot in ((10, 10), (580, 10), (300, 880), (20, 450), (580, 450)):
+        assert undone.getpixel(spot) == smoothed.getpixel(spot), spot
+
+
+def test_the_undo_brush_runs_after_the_brushes_whatever_order_she_painted_them():
+    """The page hands the strokes over in the order they were painted, but an undo laid
+    down first still has to undo the smoothing painted after it."""
+    retouch_ = [["smooth", 0.5, 0.5, 0.24, 1.0]]
+    undo = [["restore", 0.5, 0.5, 0.16]]
+    assert [e[0] for e in normalize(retouch_ + undo)] == ["smooth", "restore"]
+    assert [e[0] for e in normalize(undo + retouch_)] == ["smooth", "restore"]
+    im = speckled()
+    assert list(apply(im, undo + retouch_).getdata()) == \
+           list(apply(im, retouch_ + undo).getdata())
+
+
+def test_an_undo_brush_with_nothing_to_undo_does_not_repaint_the_picture():
+    im = speckled()
+    graded = apply(im, [["exposure", 0.3], ["contrast", 0.4]])
+    assert list(apply(im, [["exposure", 0.3], ["contrast", 0.4],
+                           ["restore", 0.5, 0.5, 0.2]]).getdata()) == list(graded.getdata())
+
+
+def test_the_undo_brush_gives_a_warp_back_its_original_shape():
+    """The undo brush is an eraser for warps as much as for smoothing, and a bend left
+    half-standing is the defect nobody notices until print."""
+    im = frame()
+    x, y, size = 0.6, 0.7, 0.5
+    push = ["warp", x, y, size, 1.0, 0, 0.5, 0.0]
+    warped = apply(im, [push])
+    undone = apply(im, [push, ["restore", x, y, size]])
+    bent = mean_error(im, warped)
+    assert bent > 0.2, "the warp did not move anything to undo"
+    assert mean_error(warped, undone) > 0.8 * bent, "the undo barely touched the warp"
+    assert mean_error(im, undone) < 0.05 * bent, f"{mean_error(im, undone) / bent:.0%} still bent"
+
+
+def test_the_undo_brush_is_never_narrower_than_the_brush_it_has_to_erase():
+    """Capping the undo below the widest retouch brush leaves a ring of retouch standing
+    around the stroke, which reads as the tool working "mostly" and is invisible in a
+    preview at phone size."""
+    widest = max(cell[2][1] for cell in edit.retouch.CLAMP.values())
+    assert edit.retouch.MAX_UNDO >= widest
+
+
+def test_the_undo_brush_is_clamped_to_a_brush_and_a_position():
+    entry = normalize([["restore", 4.0, -2.0, 40.0]])[0]
+    assert entry[1:3] == [1.0, 0.0], "her tap stays inside the frame"
+    assert entry[3] == edit.retouch.MAX_UNDO, "the stroke cannot erase the whole picture"
+    assert normalize([["restore"], ["restore", "a", "b", "c"]]) == []
 
 
 def test_a_crop_never_leaves_an_empty_corner():

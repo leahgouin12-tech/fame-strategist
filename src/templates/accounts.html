@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Accounts &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Accounts</h1>
+<p class="sub">You asked whether this could log in to your platforms and do it all itself. The
+honest answer is a fork, so it lives on a page instead of in a chat: <strong>reading your
+numbers</strong> and <strong>posting for you</strong> are different pieces of work, and each
+platform draws the line in a different place. Nothing here asks for a password, and there is no
+box that accepts one.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>The three routes, and what each one really buys</h3>
+  <div class="grid">
+    {% for id, name, says in methods %}
+    <div>
+      <p class="claim"><span class="chip {{ 'proven' if id == 'export' else 'strong' if id == 'token' else 'contested' }}">{{ name }}</span></p>
+      <p class="k">{{ says }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="limit">Reading is a solved problem on this machine: the export route works today and
+    feeds <a href="/numbers">Numbers</a>, <a href="/graph">Followers</a> and the coach. Posting is
+    not solved by any app that is not the platform&rsquo;s own &mdash; and the day something claims
+    to have solved it with your password, that is the day the account gets restricted. This app
+    takes the labour out of a post and leaves the last tap to you.</p>
+</div>
+
+<h2>Per platform</h2>
+{% for r in rows %}
+<div class="card">
+  <div class="row">
+    <h3 style="margin:0">{{ r.label }}</h3>
+    {% if r.connected %}<span class="chip post">signed in on your browser</span>{% else %}<span class="chip unreadable">not marked</span>{% endif %}
+    {% if r.method == "export" %}<span class="chip proven">export route</span>{% elif r.method == "token" %}<span class="chip strong">token route</span>{% else %}<span class="chip">handoff</span>{% endif %}
+    {% if r.fresh_days is not none %}
+      <span class="k">export read in {{ r.last_export }}
+        ({{ r.fresh_days }} day{{ "" if r.fresh_days == 1 else "s" }} ago{{
+        "; older than two weeks, so treat it as a hint" if r.fresh_days > 14 else "" }})</span>
+    {% endif %}
+    {% if r.url %}<a class="btn ghost" href="{{ r.url }}" target="_blank"
+       rel="noopener">Open {{ r.label }}</a>{% endif %}
+  </div>
+
+  <div class="grid" style="margin-top:14px">
+    <div>
+      <p class="k tiny">WHAT IT CAN READ</p>
+      <p class="claim">{{ r.reads }}</p>
+    </div>
+    <div>
+      <p class="k tiny">WHAT IT CAN POST</p>
+      <p class="claim">{{ r.posts }}</p>
+    </div>
+    <div>
+      <p class="k tiny">MUSIC AND SOUNDS</p>
+      <p class="claim">{{ r.music }}</p>
+    </div>
+  </div>
+
+  <form method="post" action="/accounts/save" style="margin-top:16px">
+    <input type="hidden" name="platform" value="{{ r.id }}">
+    <div class="row">
+      <span style="flex:1 1 200px">
+        <label>Your handle on it (optional)</label>
+        <input name="handle" value="{{ r.handle }}" placeholder="@yourname" autocomplete="off">
+      </span>
+      <span>
+        <label>Route you are using</label>
+        <select name="method">
+          {% for id, name, says in methods %}
+          <option value="{{ id }}" {{ "selected" if r.method == id }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </span>
+      <span>
+        <label>Last export date</label>
+        <input type="date" name="last_export" value="{{ r.last_export }}">
+      </span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="k"><input type="checkbox" name="connected" value="on"
+        {{ "checked" if r.connected }}> I am signed in to this in my browser</label>
+      <button type="submit">Save this note</button>
+      <button type="submit" name="forget" class="ghost" formaction="/accounts/forget">Forget</button>
+    </div>
+    <p class="k tiny" style="margin-top:10px">Saved note: {{ r.handle or "no handle" }} &middot;
+      {{ r.method }} &middot; {{ "marked" if r.connected else "unmarked" }}. This is a label on a
+      row in this app&rsquo;s own file. It is not a session, a cookie or a key.</p>
+  </form>
+
+  <p class="limit">To post from here: <a href="/story">the Composer</a> makes the finished file
+    and the exact caption &mdash; the {{ r.surfaces[0] | lower }} steps below are what a real
+    composer asks for.</p>
+  <ol class="assume">
+    {% for s in r.steps %}<li>{{ s }}</li>{% endfor %}
+  </ol>
+</div>
+{% endfor %}
+
+<h2>Handoff addresses</h2>
+<div class="card">
+  <p class="k">Some accounts live on a regional domain, and a Business suite opens somewhere
+    else. These are the links the buttons above point at. The app never opens them and never
+    reads what comes back &mdash; your browser does that, signed in, where it belongs.</p>
+  <form method="post" action="/accounts/links">
+    <div class="grid">
+      {% for r in rows %}
+      <span>
+        <label>{{ r.label }}</label>
+        <input name="link_{{ r.id }}" value="{{ links.get(r.id, r.url) }}" autocomplete="off"
+               spellcheck="false">
+      </span>
+      {% endfor %}
+    </div>
+    <p style="margin-top:14px"><button type="submit">Save addresses</button>
+      <span class="k tiny"> Written to <code>data/accounts.json</code>, which is yours and is not
+        uploaded anywhere.</span></p>
+  </form>
+</div>
+
+<h2>Where the numbers come from</h2>
+<div class="card">
+  {% if imported %}
+  <p class="claim"><span class="chip proven">{{ imported }} row{{ "s" if imported != 1 else "" }}</span>
+    read in from your own export file. Every score, best window and coach proposal on this app
+    is calculated from those rows.</p>
+  <p class="k">File: <code>{{ metrics_path }}</code></p>
+  <p><a class="btn" href="/numbers">Numbers</a> <a class="btn ghost" href="/graph">Followers</a>
+    <a class="btn ghost" href="/weekly">Coach</a></p>
+  {% else %}
+  <p class="claim">Nothing has been read in yet, so every number-shaped thing on this app is a
+    plan, not a measurement.</p>
+  <p class="k">Download your insights export from the platform, then drop the file on
+    <a href="/numbers">Numbers</a>. It stays on this machine &mdash; the app reads
+    <code>{{ metrics_path }}</code> and nothing else.</p>
+  <p><a class="btn" href="/numbers">Open Numbers</a></p>
+  {% endif %}
+  {% if staged %}
+  <p class="limit">Last post staged for handoff: <code>{{ staged }}</code> &mdash;
+    <a href="/story">open the Composer</a> to finish it.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fame Strategist &middot; locked</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <meta name="theme-color" content="#121213">
+  <meta name="color-scheme" content="dark">
+</head>
+<body class="gated">
+  <main class="gate">
+    <p class="mark"><span class="mark-a">Fame</span><span class="mark-b">Strategist</span></p>
+
+    {% if not has_pin %}
+    <h1>Not open to the network yet</h1>
+    <p>This app keeps its photos, its numbers and its editing engine on one laptop, and it
+      stays there until someone says so from that laptop. A phone is not going to be turned
+      away by accident, so nothing here loads until a PIN has been set.</p>
+    <p>On the laptop, open <code>http://127.0.0.1:8756/phone</code>, type a PIN, and come
+      back with this address.</p>
+    {% else %}
+    <h1>Enter the PIN</h1>
+    <p>One laptop, one PIN, no accounts. What is behind this page is your own photos and your
+      own numbers, so it does not open just because something found the address.</p>
+      {% if status.locked %}
+    <p class="wait">Too many wrong tries. The PIN box wakes up again in
+      {{ status.locked_minutes }} minute{{ 's' if status.locked_minutes != 1 else '' }}.</p>
+      {% else %}
+    <form method="post" action="/phone/unlock">
+      <p><input type="password" name="pin" autocomplete="off" inputmode="text"
+                autocapitalize="off" spellcheck="false" placeholder="PIN"></p>
+      <input type="hidden" name="back" value="{{ back }}">
+      <p><button type="submit">Open it</button></p>
+    </form>
+      {% if note %}<p class="wait">{{ note }}</p>{% endif %}
+      {% endif %}
+    {% endif %}
+    <p class="seal">Nothing here is sent anywhere except to your laptop.</p>
+  </main>
+</body>
+</html>

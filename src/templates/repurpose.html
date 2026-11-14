@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Repurpose &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Repurposing</h1>
+<p class="sub">The lab works out which hypothesis is winning. This is the next hour of work
+already done: the posts under the arm your own numbers favoured, cut to the shape each
+placement actually wants and rewritten for that placement in the voice you pasted.</p>
+<p class="k">Nothing here invents a picture. A crop is the same ratio chip the editor uses, a
+clip cut is the clip engine&rsquo;s own ratio, and a caption comes from the voice writer. A post
+whose file this app does not hold is named and left out instead of faked.</p>
+
+{% if note %}<p class="k"><strong>{{ note }}</strong></p>{% endif %}
+
+{% if passed %}
+<div class="card">
+  <p class="k">What this pass made</p>
+  <p class="big">{{ passed.headline }}</p>
+  {% if passed.detail %}
+  <ul class="k">{% for d in passed.detail %}<li>{{ d }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+
+{% for c in passed.cuts %}
+<div class="card">
+  <div class="row">
+    <span class="chip post">{{ c.platform }}</span>
+    <span class="k">{{ c.shape }}{% if c.kind == 'clip' %} &middot; clip{% else %} &middot; photo{% endif %}
+      &middot; from {{ c.ref }} &middot; ran under {{ c.arm }}</span>
+  </div>
+  {% if c.kind == 'photo' %}
+  <img src="/inbox/edited/{{ c.file }}" alt="The {{ c.shape }} crop of {{ c.ref }}"
+       style="max-width:220px">
+  {% else %}
+  <p class="k"><a href="/inbox/edited/{{ c.file }}">{{ c.file }}</a> &mdash; the cut
+    opens in the player on this machine.</p>
+  {% endif %}
+  <p class="k"><a href="/edit?name=edited/{{ c.file }}">open this crop in the
+    editor</a></p>
+  <pre class="block">{{ c.block }}</pre>
+  {% if c.why %}
+  <p class="k tiny">{% for w in c.why %}{{ w }} {% endfor %}</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if passed.skipped %}
+<div class="card">
+  <p class="k">Left out, and why</p>
+  {% for s in passed.skipped %}<p class="limit">{{ s }}</p>{% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+  <p class="k">What it would rebuild now &mdash; {{ got.labelled }} labelled post{{ '' if got.labelled == 1 else 's' }}
+    across {{ got.arms | length }} arm{{ '' if got.arms | length == 1 else 's' }}</p>
+  {% if wanted %}
+  <table class="tbl">
+    <tr><th>post</th><th>arm</th><th>follows per 1000 views</th><th>the file</th></tr>
+    {% for w in wanted %}
+    <tr>
+      <td>{{ w.ref }}</td>
+      <td>{{ w.arm }}</td>
+      <td>{{ w.rate }}</td>
+      <td class="tiny">{% if w.file %}{{ w.kind }} &middot; {{ w.file }}{% else %}not in this app{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="/repurpose/run" class="row" style="margin-top:14px">
+    <button type="submit">Cut these into {{ n_shapes }} shape{{ '' if n_shapes == 1 else 's' }}</button>
+    <span class="k">The originals are never touched &mdash; every cut lands next to your saved
+      edits.</span>
+  </form>
+  {% else %}
+  <p class="big">&mdash;</p>
+  <p class="k">Nothing to rebuild yet. This pass works on the posts the lab has ranked, so it
+    needs numbers on the <a href="/numbers">numbers page</a> filed under a hypothesis
+    (<a href="/lab">the lab files them</a>), and the files themselves in the inbox folder.</p>
+  {% endif %}
+</div>
+
+<p class="limit"><strong>What this is not:</strong> a second editor. It takes what already
+worked and gives it the other frames, so the week&rsquo;s best post runs in three places instead
+of one &mdash; it does not shoot new material, and it will not describe a shot it has not
+seen.</p>
+{% endblock %}

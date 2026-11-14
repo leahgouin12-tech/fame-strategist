@@ -5,15 +5,15 @@
 turns that into tomorrow's shot list. It cannot post for you, and it will not touch your followers.</p>
 
 {% if not has_interview %}
-<div class="card">
-  <h3>One click, then you're working today</h3>
+<section class="startline">
+  <h2>One click, then you're working today</h2>
   <p class="sub">This adopts the assumptions below, ranks the niches, builds the eight weeks and opens
     today's shot list. Nothing is locked in &mdash; change any line later on the interview screen.</p>
 
   <label>Optional: what do you actually have footage of? (this is the only thing it can't assume)</label>
-  <form method="post" action="/start">
+  <form method="post" action="/start" class="startform">
     <input type="text" name="what_you_actually_film" placeholder="e.g. outfits in my room, the odd street clip">
-    <button type="submit" class="btn">Set it up and show me today</button>
+    <button type="submit">Set it up and show me today</button>
   </form>
 
   <p class="k">Assuming:</p>
@@ -22,42 +22,78 @@ turns that into tomorrow's shot list. It cannot post for you, and it will not to
   </ul>
   <p class="k">or <a href="/interview">answer the eight questions yourself</a> &mdash; the plan is sized
     to the hours, so an honest number beats a flattering one.</p>
-</div>
+</section>
 {% else %}
-<div class="grid">
-  <div class="card">
-    <h3>Today</h3>
+{# Not a grid of doors. One thing to do next, then the four facts the rest of the
+   app is waiting on you to fill in. #}
+<section class="desk">
+  <a class="now" href="{{ '/today' if today else '/plan' }}">
+    <p class="now-k">Next &middot; {{ next_step }}</p>
     {% if today %}
-    <p class="claim">{{ today.hook }}</p>
-    <p class="k">{{ today.shots|length }} shots &middot; {{ today.format }}</p>
-    <a class="btn ghost" href="/today">Open the shot list</a>
+    <p class="now-hook">{{ today.hook }}</p>
+    <p class="now-meta">Week {{ today.week_no }} of 8 &middot; {{ today.format }} &middot;
+      {{ today.shots|length }} shots</p>
     {% else %}
-    <p class="sub">No plan yet.</p>
-    <a class="btn ghost" href="/plan">Build the plan</a>
+    <p class="now-hook">Nothing is planned yet, so there is nothing to shoot.</p>
+    <p class="now-meta">The eight weeks take about a minute to build from your answers.</p>
     {% endif %}
+    <span class="now-go">{{ "Open today" if today else "Build the plan" }} &rarr;</span>
+  </a>
+
+  <div class="desk-side">
+    {# The eight weeks made visible. ADHD brains need to see distance travelled, not
+       read it, so the run of the plan is eight dots rather than a sentence. #}
+    {% if today %}
+    <div class="spine">
+      <p class="spine-k">Week {{ today.week_no }} of 8</p>
+      <ul class="spine-dots">
+        {% for w in range(1, 9) %}
+        <li class="{{ 'past' if w < today.week_no }}{{ ' now' if w == today.week_no }}"><span>{{ w }}</span></li>
+        {% endfor %}
+      </ul>
+      <p class="spine-d">{{ posted_days }} day{{ '' if posted_days == 1 else 's' }} marked posted.
+        Ticks come from the day you close, not from a promise.</p>
+    </div>
+    {% endif %}
+
+    <ul class="facts">
+      <li><span class="fact-n">{% if today %}{{ today.shots|length }}{% else %}&mdash;{% endif %}</span>
+        <span class="fact-l">takes due today</span></li>
+      <li><span class="fact-n">{{ photo_count }}</span>
+        <span class="fact-l">file{{ '' if photo_count == 1 else 's' }} in the inbox</span></li>
+      <li><span class="fact-n">{{ entry_count }}</span>
+        <span class="fact-l">sourced claims</span></li>
+      <li><span class="fact-n">{{ pending_count }}</span>
+        <span class="fact-l">still unverified</span></li>
+    </ul>
   </div>
-  <div class="card">
-    <h3>Plan</h3>
-    <p class="sub">{% if plan %}8 weeks: 4 experiments, then concentrate on {{ plan.chosen }}.{% else %}Eight weeks, decided by your own numbers rather than by advice.{% endif %}</p>
-    <a class="btn ghost" href="/plan">{% if plan %}View the plan{% else %}Build it{% endif %}</a>
-  </div>
-  <div class="card">
-    <h3>Numbers</h3>
-    <p class="sub">Type three numbers per post &mdash; views, watched %, follows. Below 8 posts it will
-    tell you it has no evidence rather than invent a conclusion.</p>
-    <a class="btn ghost" href="/numbers">Enter numbers</a>
-  </div>
-  <div class="card">
-    <h3>Photos</h3>
-    <p class="sub">Drop shots into <code>{{ inbox }}</code> and it measures light, detail, shape and
-      pixels &mdash; then says which to post, which to skip, and what a fix can honestly do.</p>
-    <a class="btn ghost" href="/photos">{% if photo_count %}Read {{ photo_count }} file{{ '' if photo_count == 1 else 's' }}{% else %}Open the photo inbox{% endif %}</a>
-  </div>
-  <div class="card">
-    <h3>Sources</h3>
-    <p class="sub">Every claim this app will act on, with who says it and what it does <em>not</em> prove.</p>
-    <a class="btn ghost" href="/sources">{{ entry_count }} claims</a>
-  </div>
-</div>
+</section>
+
+<ul class="threads">
+  <li>
+    <span class="th-k">The plan</span>
+    <span class="th-d">{% if plan %}Eight weeks: four experiments, then concentrate on
+      {{ plan.chosen }}.{% else %}Eight weeks, decided by your own numbers rather than by advice.{% endif %}</span>
+    <a class="th-go" href="/plan">{% if plan %}Read it{% else %}Build it{% endif %}</a>
+  </li>
+  <li>
+    <span class="th-k">Your numbers</span>
+    <span class="th-d">Type three numbers per post &mdash; views, watched %, follows. Below 8 posts it
+      will tell you it has no evidence rather than invent a conclusion.</span>
+    <a class="th-go" href="/numbers">Enter them</a>
+  </li>
+  <li>
+    <span class="th-k">The darkroom</span>
+    <span class="th-d">Drop shots into <code>{{ inbox }}</code> and it measures light, detail, shape
+      and pixels &mdash; then says which to post, which to skip, and what a fix can honestly do.</span>
+    <a class="th-go" href="/photos">{% if photo_count %}Read them{% else %}Open it{% endif %}</a>
+  </li>
+  <li>
+    <span class="th-k">The evidence</span>
+    <span class="th-d">Every claim this app will act on, with who says it and what it does
+      <em>not</em> prove.</span>
+    <a class="th-go" href="/sources">Audit it</a>
+  </li>
+</ul>
 {% endif %}
 {% endblock %}

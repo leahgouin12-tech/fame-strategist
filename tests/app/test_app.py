@@ -59,6 +59,18 @@ def test_the_app_can_be_installed_rather_than_visited(client):
         assert got.status_code == 200, f"{icon['src']} is declared but not there to fetch"
         assert got.headers["content-type"].startswith("image/png")
         assert got.content[:8] == b"\x89PNG\r\n\x1a\n", "a manifest icon has to be a real image"
+    worker = client.get("/static/sw.js")
+    assert worker.status_code == 200, "the browser wants a worker before it offers to install"
+    page = client.get("/today").text
+    assert "/static/sw.js" in page, "a worker nobody registers installs nothing"
+    assert "beforeinstallprompt" in page, "she has to be able to install it from inside the app"
+    assert "text/html" in worker.text, "the worker keeps pages, not her photos"
+    worker = client.get("/static/sw.js")
+    assert worker.status_code == 200, "the browser needs a worker before it offers to install"
+    page = client.get("/today").text
+    assert "/static/sw.js" in page, "a worker that is never registered installs nothing"
+    assert "beforeinstallprompt" in page, "she has to be able to install it from inside the app"
+    assert "text/html" in worker.text, "the worker must keep pages, not her photos"
 
 
 def test_the_interview_refuses_an_unusable_answer_and_saves_nothing(client):
@@ -357,7 +369,7 @@ def test_the_editor_opens_a_file_and_previews_an_edit(tmp_path):
     assert page.status_code == 200
     assert "Hold to see the original" in page.text
     assert "Save a copy" in page.text
-    assert "slim" in page.text.lower(), "the page must say what the editor refuses to do"
+    assert "Reshape" in page.text, "the studio must offer the mesh brush it claims to have"
     shot = client.get("/edit/preview", params={"name": "sharp.png",
                                                "ops": json.dumps([["exposure", 0.6],
                                                                   ["heal", 0.5, 0.5, 0.04]])})

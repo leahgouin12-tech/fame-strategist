@@ -15,6 +15,16 @@ whatever your own numbers rewarded. Every week has a test that can prove it wron
     &middot; started {{ plan.start_date }}</p>
 </div>
 
+{% if plan.verdict_notes %}
+<div class="card">
+  <p class="k">What a verdict you wrote down changed</p>
+  {% for n in plan.verdict_notes %}<p class="claim">{{ n }}</p>{% endfor %}
+  <p class="k tiny">These come from the lab's remembered decisions, not from a new opinion: an
+    arm the numbers dropped does not get a week back unless you clear the memory it was written
+    to.</p>
+</div>
+{% endif %}
+
 <table>
   <tr><th>Wk</th><th>Goal</th><th>Posts</th><th>What is being tested</th><th>How this week fails</th></tr>
   {% for w in plan.weeks %}

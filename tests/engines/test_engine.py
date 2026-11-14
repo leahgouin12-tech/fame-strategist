@@ -91,9 +91,11 @@ class FakeClient:
         self.text = text
         self.status = status
         self.sent = []
+        self.headers = None
 
-    def post(self, url, params=None, json=None):
+    def post(self, url, params=None, json=None, headers=None):
         self.sent.append((url, params, json))
+        self.headers = headers
         return FakeResponse(self.text, self.status)
 
 

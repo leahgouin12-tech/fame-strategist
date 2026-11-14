@@ -1,3 +1,18 @@
+"""Scoring seven candidate formats against her answers and whatever evidence exists.
+
+Each CANDIDATES row is a name, the tags whose evidence supports it, a base appeal and
+whether it needs her face. score_candidates gives it three numbers: fit, the base appeal
+times the average confidence, read through WEIGHT, of the playbook entries sharing its
+tags and halved by FACE_PENALTY when the format needs a face and on_camera was
+refused; saturation, which is only how well sourced our own read of crowding is; and
+supply, from the hours per week and the clips she said she has. rank keeps the top six,
+and brief writes the arithmetic out instead of smoothing it, with a risk line naming the
+weakest part.
+
+No engine is consulted anywhere in this file, and a saturation_score of 0 means this app
+has no sourced idea about how crowded that space is - not that the space is open.
+"""
+
 from dataclasses import dataclass, field
 
 WEIGHT = {"proven": 1.0, "strong": 0.7, "contested": 0.35, "folklore": 0.1}

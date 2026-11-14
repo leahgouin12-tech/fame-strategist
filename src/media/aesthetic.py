@@ -4,8 +4,9 @@ Every component below is measured from pixels on this machine: where the detail 
 whether the horizon is level, how busy the background is, how much of the palette the
 file actually uses. The weights are this app's own opinion until her own numbers argue with
 them - spec 5.9 proposes a change and she accepts it - and they stay stated on the page,
-because no platform publishes an attractiveness score and a face or body is not something
-this app will rank at all.
+because no platform publishes an attractiveness score. This app does not rank a face or a
+body either; /face describes what the light, the lens and the backdrop are doing to one, in
+numbers a person can change before the next shot.
 """
 
 from dataclasses import dataclass, field

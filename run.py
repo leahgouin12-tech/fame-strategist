@@ -12,8 +12,10 @@ import webbrowser
 from pathlib import Path
 
 from src.app import DATA_DIR, create_app
+from src import net
 
 PORT = 8756
+HOST = "0.0.0.0"
 URL = f"http://127.0.0.1:{PORT}"
 WINDOW_SIZE = "1280,900"
 
@@ -83,7 +85,21 @@ def serve() -> None:
         cfg["loggers"][name]["handlers"] = cfg["loggers"][name].get("handlers", []) + ["file"]
     import uvicorn
 
-    uvicorn.run(create_app(), host="127.0.0.1", port=PORT, log_level="info", log_config=cfg)
+    # 0.0.0.0 is what lets a phone in at all, and the reason it is not a hole: the app
+    # answers a wifi address with a PIN box and nothing else until she sets one on /phone.
+    uvicorn.run(create_app(), host=HOST, port=PORT, log_level="info", log_config=cfg)
+
+
+def phone_lines() -> list[str]:
+    """What to type on the phone, or the one reason there is nothing to type yet."""
+    addresses = net.lan_addresses()
+    if not addresses:
+        return ["Phone: this laptop is not joined to a network, so there is no address to type."]
+    lines = [f"Phone: type http://{a}:{PORT} on it - steps and a PIN are on {URL}/phone"
+             for a in addresses[:2]]
+    if len(addresses) > 2:
+        lines.append(f"Phone: {len(addresses) - 2} more network cards, listed on {URL}/phone")
+    return lines
 
 
 def main() -> None:
@@ -101,6 +117,8 @@ def main() -> None:
     if os.environ.get("OPEN_WINDOW", "1") == "1":
         threading.Timer(1.2, lambda: open_in_browser(URL)).start()
     print(f"Fame Strategist is running on {URL}")
+    for line in phone_lines():
+        print(line)
     print("To keep it as an app with its own icon: browser menu > Apps > Install this site.")
     print("Nothing here is exposed to the internet. Close this window to stop the app.")
     print(f"Photos and clips are read from {DATA_DIR}\\inbox and {DATA_DIR}\\clips.")

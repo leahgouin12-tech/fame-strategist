@@ -2,6 +2,7 @@
 {% block title %}Trends &middot; Fame Strategist{% endblock %}
 {% block body %}
 <h1>What research found, and how stale it is</h1>
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
 <p class="sub">A trend is a claim with an as-of date. {{ run.note }}</p>
 
 {% if run.findings %}
@@ -50,6 +51,37 @@
     weeks ago is the baseline now, not the head start.</p>
 </div>
 {% endif %}
+
+<h2>Fresh, unverified &mdash; what a model said, not what somebody published</h2>
+<p class="claim">{{ lead_note }}</p>
+
+{% if leads %}
+  {% for l in leads %}
+  <div class="card lead">
+    <div class="row">
+      <span class="chip">no source</span>
+      <span class="k">said by {{ l.said_by }} &middot; asked on {{ l.asked_on }}</span>
+    </div>
+    <p class="claim"><strong>{{ l.format }}</strong></p>
+    <p class="limit"><strong>Why now:</strong> {{ l.why_now }}</p>
+    <p class="limit"><strong>How to test it on a phone:</strong> {{ l.how_to_test }}</p>
+    <p class="limit"><strong>What could make this wrong:</strong> {{ l.could_be_wrong }}</p>
+    <p class="k">She can promote it by checking it: go and open something that says so, then
+      write it into the playbook with the address and the date. Until then it stays here, and
+      the plan does not change on the strength of it.</p>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<form method="post" action="/trends/leads" class="card">
+  <p class="k">Asking costs one model call and writes nothing into the playbook. The lead comes
+    back with the sentence that says how it could be wrong, which is the only part a model is
+    reliably good at.</p>
+  <p class="row">
+    <button type="submit">Ask {{ engine_name }} what it thinks is rising</button>
+    {% if leads %}<button type="submit" name="forget" value="1" class="ghost">Clear the leads</button>{% endif %}
+  </p>
+</form>
 
 <h2>How the next run happens</h2>
 <div class="card">

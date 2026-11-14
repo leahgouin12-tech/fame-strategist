@@ -1,3 +1,18 @@
+"""What one piece of advice has to carry before it counts as a playbook entry.
+
+A PlaybookEntry is a claim, the mechanism behind it, an as-of date, the platforms and
+formats it applies to, and - required, not optional - a does_not_claim line stating its
+own limit. Confidence runs proven, strong, contested, folklore; SourceTier runs
+platform_official, study, practitioner, secondhand; and validate_entry returns the list
+of reasons an entry is not yet trustworthy, an empty list meaning it is.
+
+The rules that cost something are the ones worth knowing: proven needs two sources with a
+platform-official or a study among them, folklore has to explain in does_not_claim why it
+is kept at all, an entry older than STALE_AFTER_MONTHS (18) is stale and must be
+re-researched or re-dated, and a source still pointing at example.com is flagged by
+PENDING_MARKER. Nothing in this file reads or writes a document; it only judges one.
+"""
+
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum

@@ -12,3 +12,12 @@ data/*.log
 visualizationOutputDirectory/
 data/clips/
 data/frames/
+data/outputs/
+data/audio/
+data/accounts.json
+data/proof/
+data/staged/
+data/browser/
+data/shot-*.png
+src/static/_proof.html
+vibe_images/

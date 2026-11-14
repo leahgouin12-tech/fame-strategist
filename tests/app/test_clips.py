@@ -58,7 +58,7 @@ def test_opening_a_clip_judges_it_in_numbers(world):
     body = client.get("/clip", params={"name": "take.mp4"}).text
     assert "score" in body and "/ 10" in body
     assert "540×960" in body
-    assert "face slimming" in body, "the refusal is printed on the page"
+    assert "photo-editor job" in body, "the page says where a reshape is actually done"
 
 
 def test_the_strip_shows_the_frames_the_judge_already_decoded(world):

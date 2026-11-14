@@ -15,10 +15,12 @@ how much of the palette the file actually uses, how quiet the edges are &mdash; 
   <span class="k">jpg, png, webp, heic, avif, tiff &mdash; read here, never uploaded anywhere.</span>
 </div>
 
-<div class="need"><strong>It scores the frame, not you.</strong> No face, skin or body is measured or
-ranked. The editor moves, crops, brightens and softens what the camera already recorded, and borrows
-texture a few pixels away to heal a spot. It will not slim a face, reshape a body, smooth skin or
-generate pixels that were never there &mdash; and a high score is not a promise about reach.</div>
+<div class="need"><strong>What the studio actually does.</strong> Forty-odd controls in seven
+rails &mdash; frame, light, lens, skin, face, cut, layers. The skin and face rails move the
+pixels you recorded: a frequency-separated brush, a mesh reshape, a hue rotation. A reshape
+bends the background behind it and every note under a slider says so before you find out
+after posting. Nothing leaves this machine; a score is about the frame, not about you, and a
+high one is not a promise about reach.</div>
 
 {% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
 
@@ -104,6 +106,8 @@ generate pixels that were never there &mdash; and a high score is not a promise 
   <div class="saved">
     {% for p in saved %}
     <a class="chip" href="/edit?name={{ p.href }}">{{ p.name }}</a>
+    <a class="chip get" href="/inbox/{{ p.href }}" download title="Open the full-size file so
+      you can save it into your own camera roll">get</a>
     {% endfor %}
   </div>
 </div>

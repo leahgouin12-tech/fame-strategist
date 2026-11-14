@@ -1,20 +1,33 @@
 """The editing engine behind the Edit screen.
 
-Tone, geometry, lens blur, spot removal, looks - about twenty controls, all of them
-computed on her own file, on this machine, in Pillow. Nothing here reshapes a face or
-body, smooths skin, or regenerates a region: the app's own rule is that an edit which
-changes how a person looks is not one it will offer, and tests/media/test_edit.py
-fails the suite if an operation ever crosses that line.
+Ten families of tools run through one pipeline. The tone and geometry controls live here;
+the brush retouch (skin, shine, teeth, eyes, colour, liquify) lives in retouch.py; the
+effects (auto, keystone, stretch, cutout, splash, upscale) live in effects.py; the layers
+(text, a second photo, blend modes, frames, collage) live in layers.py; the colour rail
+(curves, levels, one hue at a time) lives in colour.py; the glass (tilt-shift, the four
+blurs, prism, glitch) lives in optics.py; the two push-pull warps live in mesh.py; the
+repair brushes (clone, concealer, red eye, bronzer) live in repair.py; and the drawing kit
+(brush, stickers, text on an arc, cut to shape, backdrop) lives in design.py.
+Every one of them is computed on her own file, on this machine, in Pillow - no upload,
+no model, no generative pixels that were never in the frame.
 
 A recipe is a plain list of ["name", arg, arg...] entries, so it can be shown to her,
 saved beside the file, and re-applied to the original later without losing quality.
+Brush tools carry many strokes in one entry, which is why one name can repeat.
 """
 
 from dataclasses import dataclass
+import hashlib
+import json
 import math
 from pathlib import Path
+import random
 
 from PIL import Image, ImageChops, ImageEnhance, ImageFile, ImageFilter, ImageOps
+
+from src.media import colour, design, effects, layers, mesh, optics, repair, retouch
+from src.media.registry import (EFFECTS, F, COLOUR, DESIGN, LAYERS, MESH, ORDER, OPTICS,
+                                RAILS, RAIL, REPAIR, SKIN, TITLES, Tool, tone)
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -23,7 +36,6 @@ SAVE_QUALITY = 95
 MAX_SPOT = 0.12
 MAX_ROTATE = 15.0
 RATIO_LO, RATIO_HI = 0.2, 5.0
-GROUPS = ("frame", "tone", "lens", "heal")
 
 
 @dataclass
@@ -70,8 +82,15 @@ SLIDERS = [
 OPS = {op.name: op for op in SLIDERS}
 for _extra in (Op("crop", "crop", "frame", RATIO_LO, RATIO_HI, 0.01),
                Op("flip", "mirror", "frame", 0, 1, 1),
-               Op("heal", "heal", "heal", 0, MAX_SPOT, 0.01)):
+               Op("heal", "heal", "heal", 0, MAX_SPOT, 0.01),
+               Op("restore", "restore", "heal", 0, retouch.MAX_UNDO, 0.01)):
     OPS[_extra.name] = _extra
+
+# The rails whose brushes repaint her face or move her pixels, and the one control that
+# reads the frame from before all of them. Because `restore` needs that history it cannot
+# be a (image, args) applier like the rest, so apply() runs it itself - see RUNTIME_OPS.
+RETOUCH_RAILS = ("skin", "face")
+RUNTIME_OPS = ("restore",)
 
 
 def load(path: Path) -> Image.Image:
@@ -185,6 +204,28 @@ def _lens_blur(im, args):
     return Image.composite(im, blurred, keep)
 
 
+GRAIN_TILE = 256
+
+
+def _grain(im, a):
+    """Film grain, drawn from the picture rather than from the clock.
+
+    Pillow's own effect_noise reads an unseeded generator, so the same file at the same
+    amount came out different on every call - the preview, the save and the re-opened
+    recipe were three different pictures, which makes the stored recipe a lie. Seeding from
+    a thumbnail of the image and the amount keeps it stable per photo without making every
+    photo grain in the same pattern."""
+    sigma = int(10 + 90 * a[0])
+    key = (im.convert("L").resize((8, 8), Image.BILINEAR).tobytes(), round(a[0], 4))
+    seed = int.from_bytes(hashlib.sha256(key[0] + str(key[1]).encode()).digest()[:8], "big")
+    rng = random.Random(seed)
+    tile = bytes(min(255, max(0, round(rng.gauss(128, sigma))))
+                 for _ in range(GRAIN_TILE * GRAIN_TILE))
+    need = im.size[0] * im.size[1]
+    layer = Image.frombytes("L", im.size, (tile * (1 + need // len(tile)))[:need])
+    return Image.blend(im, ImageChops.overlay(im, layer.convert("RGB")), min(0.7, a[0]))
+
+
 APPLIERS = {
     "rotate": _rotate,
     "crop": _crop,
@@ -205,11 +246,105 @@ APPLIERS = {
     "sharpness": lambda im, a: (im.filter(ImageFilter.UnsharpMask(radius=2, percent=int(190 * a[0]), threshold=2))
                                 if a[0] > 0 else im.filter(ImageFilter.GaussianBlur(-a[0] * 2.5))),
     "structure": lambda im, a: im.filter(ImageFilter.UnsharpMask(radius=16, percent=int(75 * a[0]), threshold=2)),
-    "grain": lambda im, a: Image.blend(im, ImageChops.overlay(
-        im, Image.effect_noise(im.size, int(10 + 90 * a[0])).convert("L").convert("RGB")), min(0.7, a[0])),
+    "grain": _grain,
     "vignette": lambda im, a: ImageChops.multiply(im, _multiplier(im.size, a[0])),
     "blur": lambda im, a: im.filter(ImageFilter.GaussianBlur(a[0] * 10)),
 }
+
+# The three bolt-on engines register themselves here rather than each one editing this
+# file, so a name clash is visible in one place: the tone rail already owns "tint".
+RENAMED = {"tint": "makeup"}
+ENGINE, SHAPE, CLAMP, CAP = {}, {}, {}, {}
+for _module in (retouch, effects, layers, colour, optics, mesh, repair, design):
+    for _name, _fn in _module.APPLIERS.items():
+        _key = RENAMED.get(_name, _name)
+        if _key in APPLIERS:
+            raise RuntimeError(f"{_key} is claimed by two engines")
+        ENGINE[_key] = _fn
+        SHAPE[_key] = _module.SHAPE[_name]
+        CLAMP[_key] = _module.CLAMP[_name]
+        CAP[_key] = _module.LIMITS.get(_name, 24)
+APPLIERS.update(ENGINE)
+
+
+def _legacy_tool(name: str) -> Tool | None:
+    """The controls that predate the registry, described in the same shape as the rest.
+    Their ranges still come from OPS, so a limit is written down exactly once."""
+    if name == "heal":
+        return Tool("heal", "Zap",
+                    (F(2, "brush", "slider", 0.01, MAX_SPOT, 0.005, 0.03),), stroke=True,
+                    note="Borrows the texture a few pixels around the spot - a stray hair, a bin, "
+                         "a reflection. The cap is there because a brush this blunt should not be "
+                         "repainting half a person.")
+    if name == "restore":
+        return Tool("restore", "Undo brush",
+                    (F(2, "brush", "slider", 0.01, retouch.MAX_UNDO, 0.005, 0.08),),
+                    stroke=True,
+                    note="Uncovers the pixels from before every brush stroke, right where you "
+                         "paint. The grade and the crop stay, the retouch under the brush goes - "
+                         "it reveals what was already in the file instead of smoothing again.")
+    if name == "lens_blur":
+        return Tool("lens_blur", "Fall-off",
+                    (F(0, "amount", "slider", 0, 1, 0.02, 0.5),
+                     F(1, "x", "slider", 0, 1, 0.01, 0.5),
+                     F(2, "y", "slider", 0, 1, 0.01, 0.5),
+                     F(3, "feather", "slider", 0.05, 1, 0.05, 0.45)),
+                    repeats=False,
+                    note="One point stays sharp and everything away from it softens. The point is "
+                         "yours, not detected - a machine guessing the subject is how these fail.")
+    if name in ("crop", "flip"):
+        return None
+    op = OPS[name]
+    return tone(op.name, op.label, op.lo, op.hi, op.step, op.unit,
+                op.note or f"{op.label} across the whole frame.")
+
+
+ENGINE_TOOLS = {**SKIN, **EFFECTS, **LAYERS, **COLOUR, **OPTICS, **MESH, **REPAIR, **DESIGN}
+
+
+def arity_of(name: str) -> int:
+    """How many arguments one entry of this control carries. The page slices a painted
+    stroke list by this number, and a slot layout that disagrees with it is a bug."""
+    shape = SHAPE.get(name)
+    if shape:
+        return shape[1] if shape[0] == "group" else len(shape[1])
+    return {"heal": 3, "restore": 3, "lens_blur": 4}.get(name, 1)
+
+
+RAIL_TOOLS: dict[str, list[Tool]] = {}
+for _rail in RAILS:
+    _tools = []
+    for _name in ORDER[_rail]:
+        _tool = ENGINE_TOOLS.get(_name) or (_legacy_tool(_name) if _name in OPS else None)
+        if _tool is not None:
+            _tools.append(_tool)
+    RAIL_TOOLS[_rail] = _tools
+
+TOOLS = [tool for _rail in RAILS for tool in RAIL_TOOLS[_rail]]
+TOOL_OF = {tool.op: tool for tool in TOOLS}
+ARITY = {tool.op: arity_of(tool.op) for tool in TOOLS}
+
+
+def slots(tool: Tool) -> int:
+    """How many argument slots a control occupies, counting the three a colour picker
+    writes and the two a painted position writes."""
+    used = [f.at + (3 if f.kind == "colour" else 1) for f in tool.fields]
+    used += [p + 1 for p in tool.points] if tool.stroke else []
+    return max([ARITY.get(tool.op, 1)] + used)
+
+
+def tools_json() -> str:
+    """The page builds its rails out of this, so a control the engine can already run
+    appears the moment it is named - nothing about the editor is written down twice."""
+    return json.dumps([
+        {"rail": rail, "title": TITLES[rail],
+         "tools": [{"op": t.op, "label": t.label, "stroke": t.stroke, "repeats": t.repeats,
+                    "points": list(t.points), "arity": ARITY[t.op], "note": t.note,
+                    "fields": [{"at": f.at, "label": f.label, "kind": f.kind, "lo": f.lo,
+                                "hi": f.hi, "step": f.step, "value": f.value, "unit": f.unit,
+                                "hint": f.hint, "options": list(f.options)} for f in t.fields]}
+                    for t in RAIL_TOOLS[rail]]}
+        for rail in RAILS])
 
 
 def _multiplier(size, v):
@@ -220,31 +355,100 @@ def _multiplier(size, v):
 
 
 def normalize(recipe) -> list:
-    """Drop names this engine does not know, clamp each control to its own range,
-    keep one entry per control, and always run geometry before tone."""
+    """Drop names this engine does not know, clamp every argument to the range its own
+    module declares, fold repeated strokes into the entry that already holds them, and
+    run the rails in the order the pipeline needs - geometry, then tone, then the brush,
+    then the composite layers on top."""
     seen: dict[str, list] = {}
     for entry in recipe or []:
         if not isinstance(entry, (list, tuple)) or not entry:
             continue
         name = str(entry[0])
-        if name not in APPLIERS:
+        if name in SHAPE:
+            args = _clamp_engine(name, list(entry[1:]))
+            if not args:
+                continue
+            if SHAPE[name][0] == "group":
+                if name in seen:
+                    seen[name].extend(args)
+                else:
+                    seen[name] = [name, *args]
+            else:
+                seen[name] = [name, *args]
             continue
         args = [float(a) for a in entry[1:] if isinstance(a, (int, float))]
-        if not args:
-            continue
-        seen[name] = [name] + _clamp_args(name, args)
-    ordered = sorted(seen.values(), key=lambda e: GROUPS.index(OPS[e[0]].group))
+        if args:
+            seen[name] = [name] + _clamp_args(name, args)
+    strokes = {name: _trim_groups(name, entry) for name, entry in seen.items()
+               if name in RAIL}
+    ordered = sorted((e for e in strokes.values() if e), key=_rank)
     return [e for e in ordered if not _is_noop(e)]
+
+
+def _rank(entry) -> float:
+    """Where an entry sits in the pipeline. The undo brush reads the frame from before the
+    brushes, so it runs after every one of them no matter when she painted it - otherwise
+    a stroke of undo laid down first would be buried by the smoothing painted after it."""
+    base = float(RAILS.index(RAIL[entry[0]]))
+    return base + 0.5 if entry[0] in RUNTIME_OPS else base
+
+
+def _clamp_engine(name: str, args: list) -> list:
+    """Every module declares its own ranges, so a hand-edited recipe cannot hand the
+    engine a brush size of 40 or a font size of 9000. A None bound means that slot holds
+    text, not a number."""
+    shape, bounds = SHAPE[name], CLAMP[name]
+    if shape[0] == "group":
+        k, n = shape[1], shape[2]
+        limit = max(1, min(n, CAP.get(name, n)))
+        cells = [args[i:i + k] for i in range(0, len(args) - k + 1, k)][:limit]
+        return [v for cell in cells for v in _slots(cell, bounds, k)]
+    specs = shape[1]
+    return _slots(args, bounds, len(specs), specs)
+
+
+def _slots(values: list, bounds: list, k: int, specs: list | None = None) -> list:
+    out = []
+    for i in range(k):
+        value = values[i] if i < len(values) else None
+        bound = bounds[i] if i < len(bounds) else None
+        if (specs[i] == "s") if specs else bound is None:
+            out.append(str(value)[:800] if value is not None else "")
+        else:
+            lo, hi = bound if bound else (-1.0, 1.0)
+            out.append(_num(value, lo, hi))
+    return out
+
+
+def _num(value, lo: float, hi: float) -> float:
+    try:
+        return min(max(float(value), lo), hi)
+    except (TypeError, ValueError):
+        return lo
+
+
+def _trim_groups(name: str, entry: list) -> list:
+    """A stroke whose controls are all zero is not an edit; it is wasted recomputation on
+    every preview, so it goes. The last strokes are the ones she wants to keep."""
+    shape = SHAPE.get(name)
+    if not shape or shape[0] != "group":
+        return entry
+    k = shape[1]
+    args = entry[1:]
+    kept = [args[i:i + k] for i in range(0, len(args) - k + 1, k)
+            if any(abs(v) > 1e-6 if isinstance(v, (int, float)) else v for v in args[i + 2:i + k])]
+    return [name, *[a for group in kept for a in group]] if kept else []
 
 
 def _clamp_args(name: str, args: list[float]) -> list[float]:
     """Clamp each argument by what it means. A heal entry is x, y, radius triples, so the
     slider range of the brush must not be applied to the position - that would move the
     spot somewhere she never tapped."""
-    if name == "heal":
+    if name in ("heal", "restore"):
+        cap = MAX_SPOT if name == "heal" else retouch.MAX_UNDO
         out = []
         for i in range(0, len(args) - 2, 3):
-            out += [_unit01(args[i]), _unit01(args[i + 1]), min(max(args[i + 2], 0.0), MAX_SPOT)]
+            out += [_unit01(args[i]), _unit01(args[i + 1]), min(max(args[i + 2], 0.0), cap)]
         return out
     if name == "crop":
         if len(args) == 1:
@@ -262,7 +466,15 @@ def _unit01(v: float) -> float:
 
 def _is_noop(entry) -> bool:
     name = entry[0]
-    if name == "heal":
+    shape = SHAPE.get(name)
+    if shape:
+        # A painted entry opens with the x she tapped, which is a position and not an
+        # amount; a whole-frame entry opens with its single lever. Reading both from
+        # slot 1 onwards threw away every one-argument control the engine had.
+        args = entry[2:] if shape[0] == "group" else entry[1:]
+        return not any(abs(v) > 1e-6 if isinstance(v, (int, float)) else str(v).strip()
+                       for v in args)
+    if name in ("heal", "restore"):
         return len(entry) < 4
     if name == "crop":
         box = entry[1:]
@@ -273,9 +485,23 @@ def _is_noop(entry) -> bool:
 
 
 def apply(im: Image.Image, recipe) -> Image.Image:
-    out = im
+    """Run a recipe in pipeline order, holding on to the frame as it stood before the
+    first brush stroke so the undo brush has something real to uncover.
+
+    That snapshot is taken after the geometry and the grade, which is what makes an undo
+    uncover her own skin instead of an unedited, unwarmed rectangle in the middle of a
+    finished picture.
+    """
+    out, before_brushes, brushed = im, im, False
     for entry in normalize(recipe):
-        out = APPLIERS[entry[0]](out, entry[1:])
+        name = entry[0]
+        if name in RUNTIME_OPS:
+            if brushed:
+                out = retouch.restore_pixels(out, before_brushes, entry[1:])
+            continue
+        if not brushed and RAIL.get(name) in RETOUCH_RAILS:
+            before_brushes, brushed = out, True
+        out = APPLIERS[name](out, entry[1:])
     return out
 
 

@@ -1,8 +1,10 @@
-"""The editor this app is willing to run: geometry and global tone, nothing else.
+"""The one-tap clean-up: the moves the judge can propose without asking her anything.
 
-Straighten, crop, even the tone, lift colour. All four move or brighten what the camera
-already recorded - none of them can add detail, remove an object, or change a person.
-Originals are never opened for writing; every result is a separate copy beside them.
+Straighten, the crop to the target ratio (slid to the thirds point where the subject sits),
+global tone. This is the fast path, not the whole editor - the brushes and the mesh live in
+the studio, and plenty of good frames need them. Nothing here adds detail or removes an
+object; it moves and brightens what the camera recorded. Originals are never opened for
+writing, and every result is a separate copy beside them.
 """
 
 from pathlib import Path

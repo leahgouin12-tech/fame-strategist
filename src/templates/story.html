@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Composer &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Composer</h1>
+<p class="sub">This is the whole loop in one page: the file you uploaded, the edit you made, the
+caption the app wrote, your words timed to the second, your own audio laid underneath &mdash; and
+a finished file plus the exact text to paste. It renders locally, so the file is real before you
+ever leave the page.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+{% if why %}
+<p class="k tiny">Why that line: {% for w in why %}{{ w }}{% if not loop.last %} &middot; {% endif %}{% endfor %}</p>
+{% endif %}
+
+{% if not files %}
+<div class="card">
+  <h3>Nothing to compose from yet</h3>
+  <p class="claim">The composer works on a file that is already in this app, so nothing here is a
+    picture of a feature. Put one in and come back.</p>
+  <p><a class="btn" href="/photos">Add a photo</a>
+    <a class="btn ghost" href="/clips">Add a clip</a></p>
+</div>
+{% else %}
+
+<form method="post" action="/story/ready">
+  <div class="card">
+    <h3>1 &nbsp; The file</h3>
+    <div class="row">
+      <select name="name" style="flex:1 1 320px">
+        {% for f in files %}
+        <option value="{{ f }}" {{ "selected" if f == picked }}>{{ f }}</option>
+        {% endfor %}
+      </select>
+      <a class="btn ghost" href="/edit?name={{ picked | urlencode }}">Edit it first</a>
+    </div>
+    <p class="k tiny" style="margin-top:9px">
+      {% if src %}<code>{{ src }}</code>{% else %}Nothing picked{% endif %}
+      {% if src %} &middot; {{ "a clip, so the words can be timed" if is_video else "a still, so the words are drawn once" }}{% endif %}
+      &middot; photos come from <code>{{ inbox }}</code>, clips from <code>{{ clips_folder }}</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3>2 &nbsp; Where it is going</h3>
+    <div class="row">
+      <span>
+        <label>Platform</label>
+        <select name="platform">
+          {% for p in platforms %}
+          <option value="{{ p.id }}" {{ "selected" if p.id == platform }}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </span>
+      <span style="flex:1 1 200px">
+        <label>Surface</label>
+        <input name="surface" value="{{ surface }}" list="surfaces" placeholder="{{ surfaces[0] }}">
+        <datalist id="surfaces">
+          {% for s in surfaces %}<option value="{{ s }}">{% endfor %}
+        </datalist>
+      </span>
+    </div>
+    <p class="k tiny" style="margin-top:9px">The surface changes which instructions and which word
+      budget you get at the end. It is a label, not a claim that this app can post there.</p>
+  </div>
+
+  <div class="card">
+    <h3>3 &nbsp; The words people read under it</h3>
+    <label>Caption</label>
+    <textarea name="caption" rows="4" placeholder="say the thing you would have said anyway">{{ caption }}</textarea>
+    <div class="row" style="margin-top:12px">
+      <span style="flex:1 1 260px">
+        <label>Hashtags &mdash; spaces or commas</label>
+        <input name="hashtags" value="{{ hashtags }}" placeholder="#thriftflip #fitcheck" spellcheck="false">
+      </span>
+      <span style="flex:1 1 260px">
+        <label>Alt text</label>
+        <input name="alt" value="{{ alt }}" placeholder="what is actually in the frame">
+      </span>
+    </div>
+    <p style="margin-top:14px">
+      <button type="submit" formaction="/story/caption" class="ghost">Find a caption in the app</button>
+      <span class="k tiny"> Cuts today&rsquo;s slot into this platform&rsquo;s shape, in the voice
+        it learned from your own samples. It fills the box and stops &mdash; nothing is saved
+        until you render.</span>
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>4 &nbsp; Your words, on a clock</h3>
+    <p class="k">One line per line. Give it times and they are obeyed to the frame; give it none
+      and the app spaces them across the clip and tells you where it had to squeeze.</p>
+    <textarea name="lines" rows="6" spellcheck="false"
+      placeholder="0:01-0:03.4 the dress is from a charity shop&#10;0:04-0:07 and it cost four quid&#10;this one has no time so the app will place it">{{ lines }}</textarea>
+    <div class="row" style="margin-top:12px">
+      <span class="chip">{{ "%.0f"|format(safe_top * 100) }}% clear at the top</span>
+      <span class="chip">{{ "%.0f"|format(safe_bottom * 100) }}% clear at the bottom</span>
+      <span class="chip">{{ line_limit }} characters a line</span>
+    </div>
+    <p class="limit">Words written here are <strong>baked into the pixels</strong>. That is the
+      only way a Story can carry your own timing without the platform&rsquo;s sticker, and it is
+      also why the source file is kept: there is no undo after the render. Leave the box empty and
+      you still get a real file &mdash; a still covered into the 1080&times;1920 frame, a clip with
+      its sound laid the way you asked &mdash; with <strong>nothing written on it</strong>, which
+      is what you want when you plan to type into their own sticker instead.</p>
+  </div>
+
+  <div class="card">
+    <h3>5 &nbsp; The sound</h3>
+    <div class="row">
+      <span style="flex:1 1 260px">
+        <label>Audio to mix under the clip</label>
+        <select name="audio">
+          <option value="">None &mdash; keep what the clip has, or silence</option>
+          {% for a in audios %}
+          <option value="{{ a }}" {{ "selected" if a == audio }}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </span>
+      <label class="k" style="align-self:flex-end">
+        <input type="checkbox" name="keep_audio" value="on" {{ "checked" if keep_audio }}>
+        keep the sound the clip already had
+      </label>
+    </div>
+    <p class="k tiny" style="margin-top:10px">Files you keep here live in the app&rsquo;s own audio
+      folder on this machine and are only ever mixed in when you pick one. Whatever you pick is
+      what the finished file carries &mdash; play the preview under the render card to check it.</p>
+  </div>
+
+  <p class="row">
+    <button type="submit">Render it</button>
+    {% if not has_ffmpeg %}<span class="k">ffmpeg is not on this machine, so a clip will not
+      render; a still will.</span>{% endif %}
+  </p>
+</form>
+
+<div class="card">
+  <h3>Put audio in the app once, reuse it forever</h3>
+  <form method="post" action="/story/audio" enctype="multipart/form-data" class="row">
+    <input type="file" name="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" style="flex:1 1 260px">
+    <button type="submit">Keep this audio</button>
+  </form>
+  <p class="k">A song off a streaming service is not a file you own, and no platform lets an
+    outside app attach its licensed sound &mdash; that sticker lives inside their composer, on
+    your phone. What is real here: audio you recorded, audio you licensed, a beat you made. The
+    official sound stays your two taps, and the step list says which two.</p>
+</div>
+
+{% if rendered and rendered.ok %}
+<h2>What the render actually did</h2>
+<div class="card">
+  <div class="row">
+    <h3 style="margin:0">{{ rendered.out.name }}</h3>
+    <span class="chip {{ 'proven' if rendered.kind == 'video' else 'strong' }}">{{ rendered.kind }}</span>
+    {% if rendered.duration %}<span class="chip">{{ "%.1f"|format(rendered.duration) }}s long</span>{% endif %}
+    {% if rendered.canvas[0] %}<span class="chip">{{ rendered.canvas[0] }}&times;{{ rendered.canvas[1] }}</span>{% endif %}
+  </div>
+  <div style="margin:16px 0; border:1px solid var(--rule-soft); border-radius:5px; overflow:hidden; background:#000">
+    {% if rendered.kind == 'video' %}
+    <video src="/outputs/{{ staged.file }}" controls playsinline preload="metadata"
+           style="width:100%;max-height:62vh;display:block"></video>
+    {% else %}
+    <img src="/outputs/{{ staged.file }}" alt="the rendered story frame with your words burned in"
+         style="width:100%;max-height:62vh;object-fit:contain;display:block">
+    {% endif %}
+  </div>
+  <p class="claim">Carries {{ rendered.audio }}.</p>
+
+  {% if rendered.lines %}
+  {% if rendered.kind == 'video' %}
+  <table>
+    <thead><tr><th>From</th><th>To</th><th>On screen</th><th>Words</th></tr></thead>
+    <tbody>
+      {% for l in rendered.lines %}
+      <tr>
+        <td>{{ "%.1f"|format(l.at) }}s</td>
+        <td>{{ "%.1f"|format(l.until) }}s</td>
+        <td>{{ "%.1f"|format(l.length) }}s{% if not l.reads_in_time() %}
+            <span class="chip folklore">too fast to read</span>{% endif %}</td>
+        <td>{{ l.text }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <ul class="assume">
+    {% for l in rendered.lines %}<li>{{ l.text }}{% if l.length > line_limit %}
+      <span class="chip contested">wrapped</span>{% endif %}</li>{% endfor %}
+  </ul>
+  <p class="k">A still has no clock, so every line is drawn &mdash; stacked upward from the safe
+    bottom, in order.</p>
+  {% endif %}
+  {% endif %}
+
+  {% if rendered.notes %}
+  <ul class="assume">{% for n in rendered.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="limit">The file is in <code>{{ rendered.out.parent }}</code> and the source was not
+    touched. Nothing has been posted, uploaded or sent anywhere.</p>
+</div>
+{% endif %}
+
+{% if post %}
+<h2>Take it to {{ post.platform }}</h2>
+<div class="card">
+  <p class="claim">
+    <span class="chip">{{ post.surface }}</span>
+    {% if post.file %}<a class="btn ghost" href="/outputs/{{ post.file }}" download>Download the file</a>
+    {% else %}<span class="k">No rendered file in this package yet &mdash; what is here is the
+      words you had typed.</span>{% endif %}
+  </p>
+
+  {% if post.file and not rendered %}
+  <div style="margin:14px 0; border:1px solid var(--rule-soft); border-radius:5px; overflow:hidden; background:#000">
+    {% if post.file.endswith('.mp4') %}
+    <video src="/outputs/{{ post.file }}" controls playsinline preload="metadata"
+           style="width:100%;max-height:52vh;display:block"></video>
+    {% else %}
+    <img src="/outputs/{{ post.file }}" alt="the story frame this package will post"
+         style="width:100%;max-height:52vh;object-fit:contain;display:block">
+    {% endif %}
+  </div>
+  <p class="k tiny">The file staged from your last render, still on this machine.</p>
+  {% endif %}
+
+  <label style="margin-top:14px">One block &mdash; caption and tags together, the way the composer asks for them</label>
+  <textarea id="block" rows="{{ 5 if post.block() else 2 }}" spellcheck="false">{{ post.block() }}</textarea>
+  <p><button type="button" id="copy">Copy the block</button>
+    <span class="k" id="copynote"></span></p>
+
+  {% if post.alt %}
+  <label style="margin-top:10px">Alt text, for its own field</label>
+  <input id="altbox" value="{{ post.alt }}" readonly>
+  <p class="k tiny">Double-click to select, then Ctrl+C. It is a different field on the platform,
+    which is why it is not in the block above.</p>
+  {% endif %}
+
+  {% if post.music %}
+  <p class="claim" style="margin-top:14px">Sound you noted for this post: {{ post.music }}</p>
+  {% endif %}
+
+  <ol class="steps">
+    {% for s in post.steps %}
+    <li class="step"><div class="row"><strong>{{ loop.index }}</strong><span>{{ s }}</span></div></li>
+    {% endfor %}
+  </ol>
+
+  {% if post.file %}
+  <p class="k" style="margin-top:14px">The finished file, from a phone on the same wifi:</p>
+  <ul class="assume">
+    {% for a in addresses %}
+    <li><code>http&nbsp;//{{ a }}:{{ port }}/outputs/{{ post.file }}</code></li>
+    {% endfor %}
+  </ul>
+  <p class="k tiny">Type that into the phone rather than tapping it from here, and if it refuses,
+    the PIN gate on <a href="/phone">Phone</a> is doing its job &mdash; unlock it there first.</p>
+  {% endif %}
+
+  <h3 style="margin-top:18px">What is left to you, and why</h3>
+  <ul class="assume">{% for c in post.cannot %}<li>{{ c }}</li>{% endfor %}</ul>
+
+  <form method="post" action="/story/clear" style="margin-top:16px">
+    <button type="submit" class="ghost">Clear this staged post</button>
+    <span class="k tiny"> Rendered files stay on disk; this only empties the box.</span>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>What this page will not pretend</h3>
+  <p class="claim">It will not say it posted while it only wrote a file. The render above either
+    names a file that exists on this machine or the page says what ffmpeg refused. The copy block
+    either went on your clipboard or the line under the button says it did not.</p>
+  <p class="limit">And a Story is not a feed post: {{ "%.0f"|format(safe_top * 100) }}% of the top
+    and {{ "%.0f"|format(safe_bottom * 100) }}% of the bottom is where the platform puts its own
+    chrome, which is why the words are authored to sit between them.</p>
+</div>
+
+<script>
+  const box = document.getElementById("block");
+  const sel = document.getElementById("copy");
+  if (sel && box) sel.addEventListener("click", async () => {
+    box.focus(); box.select();
+    let copied = false;
+    try { await navigator.clipboard.writeText(box.value); copied = true; }
+    catch (e) { try { copied = document.execCommand("copy"); } catch (f) { copied = false; } }
+    document.getElementById("copynote").textContent = copied
+      ? "Copied. Paste it into the caption field, not the alt field."
+      : "Your browser refused the clipboard. The block is selected - press Ctrl+C.";
+  });
+</script>
+{% endif %}
+{% endblock %}

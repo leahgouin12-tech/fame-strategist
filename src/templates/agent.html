@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Agent &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Say what you want done</h1>
+<p class="sub">This is the half of the app with hands. It reads your interview, your plan, your
+inbox and your numbers, then runs the tools in an order &mdash; writes the shot list, judges the
+frames, stages the day, applies an adjustment. Every step is recorded as <em>done</em>,
+<em>advised</em>, <em>skipped</em> or <em>failed</em>, and it cannot write <em>done</em> unless
+something on this laptop actually changed.</p>
+
+{% if note %}<p class="said">{{ note }}</p>{% endif %}
+
+<form class="console" method="post" action="/agent/run">
+  <p class="cs-eyebrow">Command</p>
+  <label class="hud" for="asked">What should it work on?</label>
+  <textarea id="asked" name="asked" rows="3"
+    placeholder="Research what is working in my niche, then rebuild my eight weeks and stage tomorrow."></textarea>
+  <p class="k">Leave it empty and it runs the whole growth loop: research, rank, plan, write the
+    day, stage it.</p>
+
+  <p class="cs-eyebrow mode-h">How much may it do without stopping?</p>
+  <ul class="modes">
+    {% for m in modes %}
+    <li>
+      <label class="mode">
+        <input type="radio" name="mode" value="{{ m.id }}" {{ 'checked' if m.id == mode.id }}>
+        <span class="mode-in">
+          <span class="mode-l">{{ m.label }}</span>
+          <span class="mode-a">{{ m.blurb }}</span>
+          <span class="mode-c">
+            {%- for c in m.caps %}<i{% if c in m.auto %} class="auto"{% endif %}>{{ cap_label[c] }}</i>{% endfor -%}
+          </span>
+        </span>
+      </label>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="k mode-key"><i class="auto"></i> runs on its own &mdash; the rest stop at advice until
+    you press them, or until you give standing permission below.</p>
+
+  <p class="cs-foot"><button class="btn" type="submit">Run it</button>
+    <span class="k">{{ tool_count }} tools, {{ runs|length }} run{{ '' if runs|length == 1 else 's' }}
+      recorded on this machine.</span></p>
+</form>
+
+<div class="card next">
+  <p class="cs-eyebrow">Its one obvious next move</p>
+  <div class="row">
+    <h3 style="margin:0">{{ next_move.go }}</h3>
+    <a class="btn ghost" href="{{ next_move.where }}">Open</a>
+  </div>
+  <p class="claim">{{ next_move.why }}</p>
+</div>
+
+{% if pending %}
+<h2>Waiting on your press</h2>
+<p class="sub">Planned, then left alone because the mode you set does not run that kind of work by
+itself. Pressing it is the authorisation.</p>
+<div class="card">
+  {% for s in pending %}
+  <form class="pend" method="post" action="/agent/step">
+    <input type="hidden" name="step" value="{{ s.id }}">
+    <span class="chip advised">advised</span>
+    <span class="pend-n">{{ s.name or s.tool }}</span>
+    <span class="pend-s">{{ s.summary }}</span>
+    <button class="btn tiny-btn" type="submit">Do it</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if runs %}
+<h2>What it did</h2>
+{% for r in runs %}
+<details class="run" {{ 'open' if loop.first }}>
+  <summary>
+    <span class="run-q">{{ r.asked or 'The growth loop' }}</span>
+    <span class="run-t">{{ r.summary }}</span>
+    <span class="k">{{ r.mode }} &middot; planned by {{ r.planner }} &middot;
+      {{ r.started_at[:10] }} at {{ r.started_at[11:16] }}</span>
+  </summary>
+  <ol class="steps">
+    {% for s in r.steps %}
+    <li class="step {{ s.kind }}">
+      <div class="row">
+        <span class="chip {{ s.kind }}">{{ s.kind }}</span>
+        <strong>{{ s.name }}</strong>
+        <span class="step-id">{{ s.tool }}</span>
+        <span class="k">{{ s.desk }}</span>
+        {% if s.kind == 'advised' %}
+        <form method="post" action="/agent/step">
+          <input type="hidden" name="step" value="{{ s.id }}">
+          <button class="chip" type="submit">do it</button>
+        </form>
+        {% endif %}
+      </div>
+      <p class="claim">{{ s.summary }}</p>
+      {% for key, value in s.lines %}
+      <p class="sd"><span>{{ key }}</span>{{ value }}</p>
+      {% endfor %}
+    </li>
+    {% endfor %}
+  </ol>
+</details>
+{% endfor %}
+{% endif %}
+
+<h2>Standing permission</h2>
+<p class="sub">Authorise a whole class of routine work once instead of approving every step.
+Read-only research and reading your own numbers are the safe ones; <em>make</em> writes files and
+<em>prepare posting</em> fills your staging folder. Nothing you grant here reaches an account,
+because nothing in this build can.</p>
+<form class="card" method="post" action="/grants">
+  <input type="hidden" name="mode" value="{{ mode.id }}">
+  <ul class="grantl">
+    {% for c in ['research', 'analyse', 'strategy', 'make', 'queue'] %}
+    <li><label class="grant">
+      <input type="checkbox" name="cap" value="{{ c }}" {{ 'checked' if c in granted }}>
+      <span class="grant-l">{{ cap_label[c] }}</span>
+      <span class="k">{{ ('writes files here.' if c == 'make' else
+                          'fills data/staged/.' if c == 'queue' else
+                          'rebuilds your eight weeks.' if c == 'strategy' else
+                          'reads the library and your numbers.' if c == 'research' else
+                          'reads your imported numbers only.') }}</span>
+    </label></li>
+    {% endfor %}
+  </ul>
+  <p><button class="btn" type="submit">Save permissions</button></p>
+</form>
+
+<h2>Who works here &mdash; the toolbox, staffed</h2>
+<p class="sub">Every desk is a named slice of the {{ tool_count }} tools it lists, so there is no
+card here without work behind it and no tool nobody is responsible for. Naming a desk runs that
+bench and nothing else; leaving the command box empty lets your sentence choose the desk, and a
+sentence that names nobody runs the whole growth loop.</p>
+{% for d in benches %}
+<div class="card">
+  <div class="row">
+    <h3 style="margin:0">{{ d.name }}</h3>
+    <span class="chip {{ 'proven' if d.ready else 'unreadable' }}">{{ d.ready }} of
+      {{ d.tools|length }} ready</span>
+    {% if d.worked %}<span class="k">worked on the last run</span>{% endif %}
+  </div>
+  <p class="claim">{{ d.line }}</p>
+  {% for t in d.tools %}
+  <div class="tcard {{ 'off' if not t.ready }}">
+    <div class="row">
+      <span class="chip {{ 'proven' if t.ready else 'unreadable' }}">{{ 'ready' if t.ready else 'shut' }}</span>
+      <strong>{{ t.name }}</strong>
+      <span class="k">{{ t.id }}</span>
+    </div>
+    <p class="th-d">{{ t.describe }}</p>
+    {% if t.why %}<p class="limit">{{ t.why }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <form class="row" method="post" action="/agent/run" style="margin-top:12px">
+    <input type="hidden" name="desk" value="{{ d.id }}">
+    <input type="hidden" name="mode" value="{{ mode.id }}">
+    <button class="btn tiny-btn" type="submit">Hand today&rsquo;s ask to {{ d.name }}</button>
+    <span class="k">Runs these {{ d.ready }} ready tool{{ '' if d.ready == 1 else 's' }} under
+      {{ mode.label }}. The rest are recorded as skipped, with what they are waiting for.</span>
+  </form>
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3>What this agent will never claim</h3>
+  <p class="claim">It cannot post, schedule, follow, like, comment, message or read your account,
+  and it will not tell you it did. There is no login in this build, no browser driving your
+  sessions, and no platform API wired to a $0 local app. The strongest thing it does is stage a
+  folder per day so posting is a drag instead of six copies and four guesses &mdash; and say so in
+  the file it writes.</p>
+  <p class="limit">It also will not pretend to know what your face or body does to reach. The
+  judge measures light, sharpness, placement and steadiness, and stops there.</p>
+</div>
+{% endblock %}

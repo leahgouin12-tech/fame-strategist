@@ -1,32 +1,112 @@
+{#
+  The shell every page wears.
+
+  On a desk the rooms live in a rail down the left, grouped by what you are
+  doing rather than alphabetised; the page itself starts at the fold. On a phone the
+  rail cannot fit, so it becomes five tabs you can reach with a thumb and a Menu
+  drawer holding the rest - the same rooms, sized to the hand.
+#}
+{% set ROOMS = [
+  ("Brief", [
+    ("Agent", "/agent", "", ["agent"]),
+    ("Today", "/today", "today", ["today"]),
+    ("Writer", "/write", "", ["write"]),
+    ("Coach", "/weekly", "", ["weekly"]),
+  ]),
+  ("Plan", [
+    ("Eight weeks", "/plan", "plan", ["plan"]),
+    ("Niches", "/niches", "", ["niches"]),
+    ("Trends", "/trends", "", ["trends"]),
+  ]),
+  ("Make", [
+    ("Photos", "/photos", "photos", ["photos"]),
+    ("Face", "/face", "", ["face"]),
+    ("Clips", "/clips", "clips", ["clips", "clip"]),
+    ("Composer", "/story", "", ["story"]),
+    ("Repurpose", "/repurpose", "", ["repurpose"]),
+    ("Engage", "/engage", "", ["engage"]),
+  ]),
+  ("Measure", [
+    ("Accounts", "/accounts", "", ["accounts"]),
+    ("Numbers", "/numbers", "numbers", ["numbers"]),
+    ("Benchmarks", "/bench", "", ["bench"]),
+    ("Lab", "/lab", "", ["lab"]),
+    ("Followers", "/graph", "", ["graph"]),
+    ("Sources", "/sources", "", ["sources"]),
+  ]),
+  ("This machine", [
+    ("Phone", "/phone", "", ["phone"]),
+    ("Model", "/engine", "", ["engine"]),
+    ("Registry", "/registry", "", ["registry"]),
+  ]),
+] %}
+{% set TABS = [
+  ("Today", "/today", "today", ["today"]),
+  ("Plan", "/plan", "plan", ["plan"]),
+  ("Photos", "/photos", "photos", ["photos"]),
+  ("Clips", "/clips", "clips", ["clips", "clip"]),
+  ("Numbers", "/numbers", "numbers", ["numbers"]),
+] %}
+{# One icon family: 24-box, 1.5 stroke, no fill, square joins. Drawn here so the
+   rail, the drawer and the tab bar can never drift apart. #}
+{% set GLYPHS = {
+  "today": '<rect x="3.5" y="5.5" width="17" height="15"/><path d="M8 2.5v6M16 2.5v6"/><path d="M7.5 13.5l2.6 2.6 6.4-6.4"/>',
+  "plan": '<path d="M12 3l8.5 4.5L12 12 3.5 7.5z"/><path d="M3.5 12L12 16.5 20.5 12"/><path d="M3.5 16.5L12 21l8.5-4.5"/>',
+  "photos": '<rect x="3.5" y="4.5" width="17" height="15"/><path d="M3.5 15.5l4.5-4.5 4 4 3-3 5 5"/><circle cx="9" cy="9" r="1.4"/>',
+  "clips": '<rect x="3.5" y="5.5" width="17" height="13"/><path d="M10.5 9.5l4.5 2.5-4.5 2.5z"/>',
+  "numbers": '<path d="M3.5 20.5h17"/><path d="M7 20.5v-6.5M12 20.5V6.5M17 20.5v-9.5"/>',
+} %}
+{% macro glyph(key) -%}
+<svg class="gl" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+     stroke-width="1.5" stroke-linejoin="miter">{{ GLYPHS[key] | safe }}</svg>
+{%- endmacro %}
+{% macro rooms(cls) -%}
+{% for label, items in ROOMS %}
+<p class="{{ cls }}-grp">{{ label }}</p>
+{% for name, href, ico, on in items %}
+<a class="{{ cls }}-link {{ 'on' if active in on }}" href="{{ href }}">{{ name }}</a>
+{% endfor %}
+{% endfor %}
+{%- endmacro %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}Fame Strategist{% endblock %}</title>
   <link rel="stylesheet" href="/static/app.css">
   <link rel="manifest" href="/static/manifest.webmanifest">
-  <meta name="theme-color" content="#12141a">
+  <meta name="theme-color" content="#121213">
+  <meta name="color-scheme" content="dark">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312141a'/><path d='M6 22l7-8 5 4 8-11' stroke='%237ee0a0' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Fame">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230b0b0c'/><path d='M7 24V8h11' stroke='%23efe9dc' stroke-width='2.4' fill='none'/><path d='M7 16h8' stroke='%23efe9dc' stroke-width='2.4' fill='none'/></svg>">
 </head>
 <body>
-  <header class="bar">
-    <div class="brand">Fame&nbsp;Strategist</div>
-    <nav>
-      <a href="/today" class="{{ 'on' if active == 'today' }}">Today</a>
-      <a href="/write" class="{{ 'on' if active == 'write' }}">Writer</a>
-      <a href="/weekly" class="{{ 'on' if active == 'weekly' }}">Coach</a>
-      <a href="/trends" class="{{ 'on' if active == 'trends' }}">Trends</a>
-      <a href="/engage" class="{{ 'on' if active == 'engage' }}">Engage</a>
-      <a href="/graph" class="{{ 'on' if active == 'graph' }}">Followers</a>
-      <a href="/plan" class="{{ 'on' if active == 'plan' }}">Plan</a>
-      <a href="/niches" class="{{ 'on' if active == 'niches' }}">Niches</a>
-      <a href="/photos" class="{{ 'on' if active == 'photos' }}">Photos</a>
-      <a href="/clips" class="{{ 'on' if active in ('clips', 'clip') }}">Clips</a>
-      <a href="/numbers" class="{{ 'on' if active == 'numbers' }}">Numbers</a>
-      <a href="/sources" class="{{ 'on' if active == 'sources' }}">Sources</a>
-    </nav>
+  <aside class="rack">
+    <a class="mark" href="/">
+      <span class="mark-a">Fame</span>
+      <span class="mark-b">Strategist</span>
+    </a>
+    <nav class="racknav">{{ rooms("rack") }}</nav>
+    <div class="rack-foot">
+      <button id="install" class="ghost tiny-btn" hidden>Install app</button>
+      <p class="rack-engine">{{ engine_name }} engine &middot; {{ entry_count }} claims</p>
+    </div>
+  </aside>
+
+  <header class="pane">
+    <a class="mark small" href="/">
+      <span class="mark-a">Fame</span><span class="mark-b">Strategist</span>
+    </a>
+    <details class="drawer">
+      <summary>Menu</summary>
+      <div class="drawer-body">{{ rooms("drawer") }}</div>
+    </details>
   </header>
 
   {% if offline %}
@@ -43,10 +123,38 @@
     {% block body %}{% endblock %}
   </main>
 
-  <footer class="bar foot">
+  <nav class="tabs" aria-label="Rooms">
+    {% for name, href, ico, on in TABS %}
+    <a class="tab {{ 'on' if active in on }}" href="{{ href }}">{{ glyph(ico) }}<span>{{ name }}</span></a>
+    {% endfor %}
+  </nav>
+
+  <footer class="foot">
     <span>{{ entry_count }} sourced claims loaded</span>
     <span>engine: {{ engine_name }}</span>
     <span class="dis">{{ disclaimer }}</span>
   </footer>
+
+  <script>
+    // Installed as an app rather than bookmarked: the worker is what makes the browser
+    // offer it, and the chip only appears when the browser actually has an offer.
+    const chip = document.getElementById("install");
+    if (matchMedia("(display-mode: standalone)").matches && chip) chip.remove();
+    if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      addEventListener("load", () => navigator.serviceWorker
+        .register("/static/sw.js").catch(() => {}));
+    }
+    let offer = null;
+    addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      offer = event;
+      if (chip) chip.hidden = false;
+    });
+    if (chip) chip.addEventListener("click", () => {
+      if (!offer) return;
+      offer.prompt();
+      offer.userChoice.then(() => { offer = null; chip.hidden = true; });
+    });
+  </script>
 </body>
 </html>

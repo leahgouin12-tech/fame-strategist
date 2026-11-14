@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}The model &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>The model behind the strategist</h1>
+<p class="sub">Everything else in this app runs on this machine without asking anyone.
+This page is the one switch: give it a key and the coach, the niche brief, the trend leads
+and the face description stop being rules you could have written yourself and start being
+answers from a model that has read more than you have.</p>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <div class="row">
+    <span class="big">{% if live %}live{% else %}offline{% endif %}</span>
+    <span class="k">
+      {% if live %}
+        asking <strong>{{ engine_name }}</strong>
+      {% else %}
+        nothing is asked. Pages that need the model say so instead of inventing an answer.
+      {% endif %}
+    </span>
+  </div>
+  <p class="k">Key on file: <strong>{{ mask }}</strong> &middot; model: <strong>{{ model }}</strong></p>
+  <p class="k">The key is stored in <code>config.toml</code> in this folder, which git is told
+    to ignore. It is never printed on a page, never sent to a browser other than the one you
+    typed it into, and never part of a URL.</p>
+</div>
+
+<div class="card">
+  <form method="post" action="/engine/save">
+    <label class="ctl word">
+      <span>API key</span>
+      <input type="password" name="api_key" placeholder="{% if mask != 'none' %}leave empty to keep {{ mask }}{% else %}paste a key{% endif %}"
+             autocomplete="off" spellcheck="false">
+      <span class="k">paste once</span>
+    </label>
+    <label class="ctl word">
+      <span>Model</span>
+      <input type="text" name="model" value="{{ model }}" placeholder="{{ default_model }}">
+      <span class="k">name from your own key's list</span>
+    </label>
+    <div class="row">
+      <button type="submit" class="btn">Save</button>
+      <span class="k">saving changes the running app immediately &mdash; no restart, and the
+        pages you already have open will use it on their next load.</span>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <form method="post" action="/engine/test">
+    <input type="hidden" name="api_key" value="">
+    <input type="hidden" name="model" value="{{ model }}">
+    <div class="row">
+      <button type="submit" class="btn">Test it once</button>
+      <span class="k">makes one real request and reports exactly what came back, including
+        the error text if there is one. It does not save anything either way.</span>
+    </div>
+  </form>
+</div>
+
+<div class="need"><strong>What a key changes, and what it does not.</strong> With one, the
+coach can answer the question you actually asked rather than the nearest question in its
+rules, the niche brief reads your answers instead of matching them, and the face page
+describes the crop it was shown. Without one, all of those pages still work: they fall back
+to the researched rules and label the result as such. A key never unlocks an action this
+app would otherwise refuse &mdash; it does not post, follow, message or scrape anything on
+your behalf, and no model gets to decide that for you either.</div>
+
+<p class="k">To get a key: open the Google AI Studio page in your browser, sign in, and use
+its <em>Get API key</em> control. The free tier is enough for this app; nothing here is set
+up to spend money.</p>
+{% endblock %}

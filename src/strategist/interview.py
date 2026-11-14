@@ -1,3 +1,17 @@
+"""The eight questions the plan is built on, and the refusal to answer them for her.
+
+InterviewAnswers defaults every field to None and __post_init__ raises naming whichever
+one is still missing, because a plan built on a guessed answer is a plan she cannot
+actually follow. Interview.checklist returns what is absent plus the MIN_HOURS floor of
+2 hours a week, Interview.complete is what the routes ask before planning, and
+Interview.REQUIRED is the field list itself.
+
+defaults is the one-click start on the home screen, and it is an adoption rather than a
+guess - 5 hours, on camera, phone only, clips already on the device, three platforms,
+zero followers - spelled back out by Interview.assumptions so a single click accepts
+stated assumptions she can see, not an invisible profile.
+"""
+
 from dataclasses import dataclass, fields
 
 MIN_HOURS = 2

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}The face in the frame &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>The face in the frame</h1>
+<p class="sub">{{ contract }}</p>
+
+{% if note %}<p class="banner warn">{{ note }}</p>{% endif %}
+
+{% if files %}
+<div class="row">
+  {% for f in files %}
+  <a class="chip {% if f == name %}on{% endif %}" href="/face?name={{ f | urlencode }}">{{ f }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if src %}
+<div class="card facewrap">
+  <div class="tapframe" id="tapframe">
+    <img src="/inbox/{{ name | urlencode }}" alt="{{ name }}" id="faceimg">
+    {% if pct %}
+    <span class="facebox" style="left: {{ '%.2f'|format(pct.left) }}%; top: {{ '%.2f'|format(pct.top) }}%;
+      width: {{ '%.2f'|format(pct.width) }}%; height: {{ '%.2f'|format(pct.height) }}%"></span>
+    {% endif %}
+  </div>
+  <p class="k">
+    {% if read.placed == 'you placed it' %}
+      This box is the one you placed.
+    {% elif read.confident %}
+      This box was found by colour and the two checks under it agree it is a face.
+    {% else %}
+      This box was guessed. <strong>Tap the photo on her face</strong> and every number
+      below is re-measured inside the box you chose.
+    {% endif %}
+  </p>
+  <div class="row">
+    <span class="k">box size:</span>
+    {% for s, label in [(0.12, 'tight'), (0.22, 'normal'), (0.40, 'close-up')] %}
+    <a class="chip {% if size == s %}on{% endif %}"
+       href="/face?name={{ name | urlencode }}&size={{ s }}{% if fx %}&fx={{ fx }}&fy={{ fy }}{% endif %}">{{ label }}</a>
+    {% endfor %}
+    {% if read.found %}<span class="chip">{{ read.share }}% of the frame</span>{% endif %}
+    <a class="chip" href="/face?name={{ name | urlencode }}&size={{ size }}">clear my tap</a>
+  </div>
+</div>
+
+{% if read.found %}
+<div class="card">
+  <p class="claim"><strong>What was measured</strong></p>
+  <ul class="words">
+    {% for w in read.words %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+  <table class="parts">
+    {% for row in [
+      ('Skin in the box', read.fill, 'how much of this box the colour rule calls skin'),
+      ('Dark band', read.band, 'eyes, brows and hair pull one band of a face much darker'),
+      ('Light fall', read.light_fall, 'difference between the two halves of the box, in % of brightness'),
+      ('Mirror difference', read.symmetry, 'how far the box drifts from its own reflection'),
+      ('Colour spread', read.tone_evenness, 'mixed colour temperature inside the box'),
+      ('Sharpness vs frame', read.clarity, 'edge detail in the box divided by the whole frame'),
+      ('Backdrop vs face', read.backdrop, 'edge detail outside the box divided by inside it')
+    ] %}
+    {% set key, val, why = row %}
+    {% if val is not none %}
+    <tr>
+      <td>{{ key }}</td>
+      <td class="k">
+        {% if key == 'Light fall' %}
+          {% if val >= 0 %}right +{% else %}left {% endif %}{{ '%.0f'|format(val * 2) }}% brighter
+        {% else %}{{ val }}{% endif %}
+      </td>
+      <td class="k">{{ why }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </table>
+</div>
+
+{% if read.fixes %}
+<div class="card">
+  <p class="claim"><strong>Change before the next shot</strong></p>
+  <ul class="fixes">
+    {% for f in read.fixes %}<li>{{ f }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if read.model_says %}
+<div class="card model">
+  <p class="claim"><strong>{{ read.model_source }}</strong></p>
+  <p>{{ read.model_says }}</p>
+  <p class="k">The model was shown the same crop the numbers measured. It is not a second
+    opinion about you &mdash; it is a description of the picture, and the numbers above still
+    decide what this page says.</p>
+</div>
+{% elif read.model_source != 'not asked' %}
+<p class="k">The model was asked and {{ read.model_source }}. Everything above was measured
+  locally and is unaffected.</p>
+{% endif %}
+
+{% else %}
+<div class="card"><p class="claim">{{ read.words[0] }}</p></div>
+{% endif %}
+
+{% else %}
+<div class="need"><strong>How this page works.</strong> Pick a photo, read the sentences, then
+tap the photo on the face if the box is not on it. Nothing is scored and nothing is uploaded:
+every number is a property of the light, the lens and the backdrop, and each one can be changed
+by moving something before you shoot.</div>
+{% endif %}
+
+<script>
+(function () {
+  var frame = document.getElementById("tapframe");
+  if (!frame) return;
+  frame.addEventListener("click", function (ev) {
+    var r = frame.getBoundingClientRect();
+    var fx = ((ev.clientX - r.left) / r.width).toFixed(4);
+    var fy = ((ev.clientY - r.top) / r.height).toFixed(4);
+    var size = new URLSearchParams(location.search).get("size") || "{{ size }}";
+    location.href = "/face?name={{ name | urlencode }}&size=" + size + "&fx=" + fx + "&fy=" + fy;
+  });
+})();
+</script>
+{% endblock %}
