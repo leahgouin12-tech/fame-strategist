@@ -38,6 +38,8 @@ from src.agent import modes as agent_modes
 from src.agent import orchestrator, tools as agent_tools
 from src.agent import roster as agent_roster
 from src.agent.tools import Kit
+from src.captions import tags as caption_tags
+from src.captions import tone as caption_tones
 from src.config import DEFAULT_MODEL, Config
 from src.db import DB
 from src.engines.base import Live
@@ -872,6 +874,44 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                    (staged.get("surface") or staged.get("platform") or ""))
         got = money.check_disclosure(text, surface, bool(form.get("in_video")))
         return money_view(request, note="", checked=got, asked_text=text, where=where)
+
+    MEDIA_KINDS = ("photo", "video", "story")
+
+    def captions_view(request, subject="", platform="instagram", media="photo", note=""):
+        """Six temperatures on the same shot, and the tags this app can account for.
+
+        Nothing is generated until she says what is in the frame: an empty box gives an empty
+        page rather than six cards of somebody else's idea of a post.
+        """
+        media = media if media in MEDIA_KINDS else "photo"
+        platform = accounts.platform_id(platform)
+        profile = voice.learn(db.get_voice())
+        plan = plan_or_none()
+        today = date.today()
+        arm = experiment.arm_for(plan, today) if plan else ""
+        key = accounts.caption_key(platform)
+        rules = voice.PLATFORM_RULES.get(key, voice.PLATFORM_RULES["reels"])
+        cards = [{"tone": t, "lines": caption_tones.lines(t.id, subject, profile, key,
+                                                          media, today=today)}
+                 for t in caption_tones.TONES] if subject.strip() else []
+        rows = metrics_rows()
+        return page(request, "captions.html", note=note, subject=subject, platform=platform,
+                    media=media, places=accounts.PLATFORMS, profile=profile, cards=cards,
+                    tones=caption_tones.TONES, tag_list=caption_tags.candidates(
+                        platform, subject, profile, rows, arm),
+                    tag_limit=caption_tags.limit_for(platform),
+                    tag_rules=caption_tags.missing(rows, profile, subject),
+                    budget=rules["words"], shape_rule=rules["shape"],
+                    arm=arm, filled=caption_tones.slots(subject, today, media),
+                    n_watched=len(caption_tones.WATCHED),
+                    staged=db.get_staged())
+
+    @app.get("/captions", response_class=HTMLResponse)
+    def captions_page(request: Request, subject: str = "", platform: str = "instagram",
+                      media: str = "photo", note: str = ""):
+        """Caption tones and the tag list, both built only out of what she typed and what her
+        own numbers already say."""
+        return captions_view(request, subject, platform, media, note)
 
     def repurpose_view(request, passed=None, note=""):
         """The page in either state: what it would rebuild, or what it did. The candidate list

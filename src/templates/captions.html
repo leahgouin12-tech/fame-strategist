@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Captions &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Caption tones</h1>
+<p class="sub">The same shot, six temperatures. Type what is in the frame and each tone writes
+three lines out of <em>your</em> words, in the casing your voice profile measured &mdash; cunty,
+lit, funny, niche, aesthetic, soft. Below them, the tags this app can account for, each one
+labelled with what put it there.</p>
+<p class="k">No model call: the lines are built on this machine out of the sentence you typed.
+Nothing here is filtered &mdash; an adult line is written when you ask for one, and the app names
+the word a caption filter is likely to look at instead of refusing to write it.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+{% if not profile.learned %}
+<p class="need">Your voice is unlearned, so every line below is in the app&rsquo;s casing, not
+yours. Paste a few captions you have actually written on the
+<a href="/write">Writer</a> page and the same tones come back sounding like you.</p>
+{% endif %}
+
+<div class="card">
+  <form method="get" action="/captions" class="startform">
+    <label for="subject" style="flex:1 1 320px">What is in the frame
+      <input id="subject" name="subject" value="{{ subject }}" style="width:100%"
+        placeholder="mirror selfie in the black ribbed tank">
+    </label>
+    <label for="platform">Where it goes
+      <select id="platform" name="platform">
+        {% for p in places %}
+        <option value="{{ p.id }}" {% if p.id == platform %}selected{% endif %}>{{ p.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label for="media">What you are posting
+      <select id="media" name="media">
+        {% for m in ("photo", "video", "story") %}
+        <option value="{{ m }}" {% if m == media %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Write them</button>
+  </form>
+  <p class="k tiny">A photo gets the line. A video or a Story gets a spoken hook in front of it,
+  and if the pair will not fit the {{ budget }} words {{ platform }} reads as, the hook goes
+  alone &mdash; nothing here ends mid-sentence.</p>
+</div>
+
+{% if not subject.strip() %}
+<div class="card">
+  <p class="big">Nothing is written yet, on purpose.</p>
+  <p class="k">These lines are built out of the words you use for the shot, so an empty box would
+  have to invent a post. Try one of these:</p>
+  <p class="chipset row">
+    {% for ex in ("mirror selfie in the black ribbed tank", "the new boots in the car park",
+                  "three clips of the same latte", "sitting on the kitchen floor at 1am") %}
+    <a class="chip" href="/captions?subject={{ ex | urlencode }}&amp;platform={{ platform }}&amp;media={{ media }}">{{ ex }}</a>
+    {% endfor %}
+  </p>
+</div>
+{% else %}
+
+<div class="card">
+  <h3>What the tones are working with</h3>
+  <table class="parts">
+    <tr><td>the thing</td><td>{{ filled.thing }}</td></tr>
+    <tr><td>the part</td><td>{{ filled.part or "&mdash; nothing beyond the thing itself" }}</td></tr>
+    <tr><td>the detail</td><td>{{ filled.detail or "&mdash; you did not name one, and the shapes
+      that need it are skipped rather than padded" }}</td></tr>
+    <tr><td>the count</td><td>{{ filled.count or "&mdash; nothing in your sentence names a number,
+      so the shapes that count are skipped rather than given a three" }}</td></tr>
+    <tr><td>the form</td><td>{{ filled.form }} &mdash; what the line is allowed to call the
+      post</td></tr>
+    <tr><td>the day</td><td>{{ filled.day }}</td></tr>
+  </table>
+  <p class="k tiny">Add a specific to your sentence &mdash; the ribbing, the scuff, the second
+  hand shop &mdash; and say how many, and these cards get longer. The shapes that point at a
+  detail or count a run are the ones that need something you have not given yet.</p>
+</div>
+
+<p class="chipset row">
+  {% for card in cards %}<a class="chip" href="#tone-{{ card.tone.id }}">{{ card.tone.name }}</a>{% endfor %}
+</p>
+
+{% for card in cards %}
+<div class="card" id="tone-{{ card.tone.id }}">
+  <div class="row">
+    <h3 style="margin:0">{{ card.tone.name }}</h3>
+    {% if card.tone.shout %}<span class="chip contested">loud</span>{% endif %}
+    <span class="k">{{ card.lines | length }} line{{ "" if card.lines | length == 1 else "s" }}</span>
+  </div>
+  <p class="claim">{{ card.tone.line }}</p>
+  {% if not card.lines %}
+  <p class="limit">Nothing written in this tone: every shape it has asks for a detail of the thing
+    itself or a count, and your sentence did not carry one.</p>
+  {% endif %}
+  {% for c in card.lines %}
+  <div class="cs-block">
+    <p class="captext">{{ c.text }}</p>
+    <p class="row">
+      <button type="button" class="tiny-btn copy-line" data-copy="{{ c.text }}">Copy</button>
+      <span class="k tiny">{{ c.words }}/{{ budget }} words</span>
+      {% if c.watched %}<span class="chip skip">{{ c.watched | length }} watched word{{ "" if c.watched | length == 1 else "s" }}</span>{% endif %}
+      <span class="k tiny copy-note"></span>
+    </p>
+    <details>
+      <summary class="k tiny">Why this line reads like that</summary>
+      <ul class="assume">{% for w in c.explain(profile) %}<li>{{ w }}</li>{% endfor %}</ul>
+    </details>
+  </div>
+  {% endfor %}
+  <p class="k tiny">What this tone costs: {{ card.tone.cost }}</p>
+</div>
+{% endfor %}
+
+<h2>The tags</h2>
+<p class="k">{{ platform }} carries {{ tag_limit }} here &mdash; the number this app reads off the
+format, not one the platform publishes
+{% if arm %}&middot; today&rsquo;s arm is <strong>{{ arm }}</strong>{% endif %}.</p>
+
+<div class="card">
+  {% if tag_list %}
+  <table class="tbl">
+    <tr><th>tag</th><th>where it came from</th><th>the evidence</th></tr>
+    {% for t in tag_list %}
+    <tr>
+      <td>{{ t.tag }}</td>
+      <td><span class="chip {{ 'proven' if t.source == 'your numbers' else ('strong' if t.source == 'your captions' else 'unreadable') }}">{{ t.source }}</span></td>
+      <td class="k tiny">{{ t.evidence }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="row" style="margin-top:10px">
+    <button type="button" class="tiny-btn" id="copy-tags">Copy the tag line</button>
+    <span class="k tiny copy-note" id="tags-note"></span>
+  </p>
+  <label class="k tiny" style="display:block;margin-top:6px">What you copy</label>
+  <textarea id="tagblock" rows="2" style="width:100%">{% for t in tag_list %}{{ t.tag }} {% endfor %}</textarea>
+  {% else %}
+  <p class="big">No tag is on this list.</p>
+  {% endif %}
+  {% if tag_rules %}
+  <p class="k">What had to be missing for the list to be this short:</p>
+  <ul class="assume">{% for m in tag_rules %}<li>{{ m }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="limit">There is no trending-tag feed here because there is nothing to read. No
+    platform publishes a hashtag list this app can query, and a scraped one would be somebody
+    else&rsquo;s account doing the ranking. A tag with no evidence behind it is not shown at
+    all &mdash; the four sources that can put one on this page are labelled in the middle
+    column. Banned-by-experience tags (#fyp, #viral, #foryou) are dropped even when they are
+    already in your own captions.</p>
+</div>
+
+<div class="card">
+  <h3>What this page will not do</h3>
+  <p class="claim">It will not soften what you asked for. The lines are written as spoken &mdash;
+    the app has {{ n_watched }} words in its own watch list, and it says which one landed in
+    which caption instead of quietly removing it or refusing to write the post.</p>
+  <p class="limit">That list is ours, not a published one: no platform prints the words its
+    caption filter looks at, so the honest version is a note about reach, not a claim about
+    breaking a rule. What this page cannot see at all is the crop, the sticker over the caption
+    and the audio &mdash; those are yours to check before it posts.</p>
+  {% if staged.caption %}
+  <p class="k">The <a href="/story">composer</a> is currently holding a different caption
+    ({{ staged.surface or staged.platform or "unstated surface" }}). Copying from here does not
+    overwrite it until you stage it there.</p>
+  {% endif %}
+</div>
+
+<script>
+  function inline_copy(text, note, fail) {
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(box);
+    box.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    box.remove();
+    if (ok) { note.textContent = "Copied."; } else { fail(note); }
+  }
+  function put_on_clipboard(text, note, fail) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        note.textContent = "Copied.";
+      }, () => inline_copy(text, note, fail));
+    } else {
+      /* The phone reaches this app over wifi, not https, so the clipboard API is unavailable
+         there and this is the path it takes. */
+      inline_copy(text, note, fail);
+    }
+  }
+  document.querySelectorAll(".copy-line").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const note = btn.closest(".row").querySelector(".copy-note");
+      put_on_clipboard(btn.getAttribute("data-copy"), note, (n) => {
+        n.textContent = "The browser would not copy it - select the line and copy by hand.";
+      });
+    });
+  });
+  const tags = document.getElementById("copy-tags");
+  if (tags) {
+    tags.addEventListener("click", () => {
+      const box = document.getElementById("tagblock");
+      put_on_clipboard(box.value.trim(), document.getElementById("tags-note"), (n) => {
+        n.textContent = "The browser would not copy it - the line is selected, press Ctrl+C.";
+        box.focus();
+        box.select();
+      });
+    });
+  }
+</script>
+{% endif %}
+{% endblock %}

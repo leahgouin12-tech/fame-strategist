@@ -60,11 +60,11 @@ DESKS = (
          ("judge", "score", "rate my", "which photo", "better picture", "compare", "edit",
           "polish", "fix my", "enhance", "retouch", "face", "looks best")),
     Desk("voice", "The Voice",
-         "Writes the line for each placement in the casing she actually types in, and drafts "
-         "the replies.",
-         ("copy.packs", "community.drafts"),
+         "Writes the line for each placement in the casing she actually types in, in the "
+         "temperature she asks for, picks the tags it can account for, and drafts the replies.",
+         ("copy.packs", "copy.tone", "copy.tags", "community.drafts"),
          ("caption", "hook", "write", "copy", "reply", "replies", "comment", "what do i say",
-          "wording")),
+          "wording", "tone", "cunty", "funny", "aesthetic", "selfie", "hashtag")),
     Desk("metrics", "The Analyst",
          "Reads the numbers she typed, names a window from her own history and proposes the "
          "adjustment.",

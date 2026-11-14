@@ -21,6 +21,9 @@ from pathlib import Path
 
 from src.experiment import ledger as experiment
 from src.experiment import repurpose
+from src import accounts
+from src.captions import tags as tag_tool
+from src.captions import tone as tones
 from src.media.aesthetic import WEIGHTS, judge_photo
 from src.media.edit import PRESETS, edit_file
 from src.media.judge import measure
@@ -456,6 +459,90 @@ def money_label(kit, text: str = ""):
         needs_video=got.needs_video, in_video=got.in_video, where="/money")
 
 
+# ---- captions ---------------------------------------------------------------
+
+def _caption_platform(kit, platform: str) -> str:
+    """The placement she named, or the one the composer is already holding, or the first one
+    her interview says she posts to. Never a guess this app makes up."""
+    if (platform or "").strip():
+        return accounts.platform_id(platform)
+    staged = kit.db.get_staged()
+    if staged.get("platform"):
+        return accounts.platform_id(staged["platform"])
+    answers = kit.answers()
+    named = (getattr(answers, "platforms", []) or []) if answers else []
+    return accounts.platform_id(named[0]) if named else "instagram"
+
+
+def copy_tone(kit, subject: str = "", tone_id: str = "", platform: str = "", media: str = ""):
+    """The same shot in six temperatures, out of her own words and her own casing.
+
+    With no description of the frame it falls back to the footage line from the interview,
+    because that is the only sentence this app holds about what she actually films.
+    """
+    profile = voice.learn(kit.db.get_voice())
+    place = _caption_platform(kit, platform)
+    key = accounts.caption_key(place)
+    answers = kit.answers()
+    asked = (subject or "").strip() or (subject_of(answers).strip() if answers else "")
+    if not asked:
+        return skipped("no description of the frame - nothing was typed and the interview does "
+                       "not say what you film, so there are no words of yours to build a line "
+                       "out of.")
+    picked = [t for t in tones.TONES if not tone_id or t.id == tone_id.strip().lower()]
+    if not picked:
+        return skipped(f"{tone_id!r} is not one of the tones this app writes: "
+                       + ", ".join(t.id for t in tones.TONES) + ".")
+    today = date.today()
+    cards = [{"tone": t.id, "name": t.name,
+              "lines": [{"text": c.text, "words": c.words, "shape": c.shape,
+                         "watched": c.watched, "why": c.explain(profile)}
+                        for c in tones.lines(t.id, asked, profile, key, media, today=today)]}
+             for t in picked]
+    written = sum(len(c["lines"]) for c in cards)
+    if not written:
+        return advised("No line written: every shape those tones have asks for a detail of the "
+                       f"thing itself or a count, and {asked!r} carries neither.",
+                       subject=asked, platform=place, cards=[], where="/captions")
+    return advised(
+        f"{written} line{'s' if written != 1 else ''} for {len(cards)} tone"
+        f"{'s' if len(cards) != 1 else ''} out of {asked!r} for {place}"
+        + (", in the casing your samples show" if profile.learned
+           else " - your voice is unlearned, so the casing is the app's") + ".",
+        subject=asked, fills=tones.slots(asked, today, media), platform=place,
+        media=media or "photo",
+        voice=profile.samples, cards=cards, where="/captions")
+
+
+def tags_pick(kit, subject: str = "", platform: str = "", limit: int = 0):
+    """The tags this app can account for, each with the evidence that put it on the list.
+
+    There is no trending feed behind this: no platform publishes a hashtag list the app can
+    read, so a tag appears only from her own numbers, her own captions, her own words for the
+    shot, or the format this week's arm carries.
+    """
+    rows = kit.rows()
+    profile = voice.learn(kit.db.get_voice())
+    plan = kit.plan()
+    arm = experiment.arm_for(plan, date.today()) if plan else ""
+    place = _caption_platform(kit, platform)
+    answers = kit.answers()
+    asked = (subject or "").strip() or (subject_of(answers).strip() if answers else "")
+    got = tag_tool.candidates(place, asked, profile, rows, arm,
+                              limit=int(limit) if limit else None)
+    missing = tag_tool.missing(rows, profile, asked)
+    if not got:
+        return advised("No tag can be accounted for - nothing on this machine puts one on the "
+                       "list, and an invented tag is the one thing worse than no tag.",
+                       tags=[], missing=missing, platform=place, where="/captions")
+    return advised(
+        f"{len(got)} tag{'s' if len(got) != 1 else ''} for {place}, which carries "
+        f"{tag_tool.limit_for(place)}: " + "; ".join(
+            f"{t['tag']} from {t['source']}" for t in got),
+        tags=got, missing=missing, platform=place, arm=arm or "unplanned",
+        block=tag_tool.block(place, got), where="/captions")
+
+
 # ---- community & queue ------------------------------------------------------
 
 def reply_drafts(kit):
@@ -626,6 +713,16 @@ add("money.label", "Check the post says it is an ad", "Money", "analyse", args=(
     describe="Reads the staged caption, or the text she gives, against the disclosure rule: "
              "whether the word is there, where it sits, whether the placement needs it in the "
              "video, and what no text check can see.")(money_label)
+add("copy.tone", "Write the shot in six temperatures", "Make", "make",
+    args=("subject", "tone_id", "platform", "media"),
+    describe="Six temperatures on the same caption from her own words - cunty, lit, funny, "
+             "detail, aesthetic, soft - in the casing her samples show. No model call, and "
+             "nothing filtered.")(copy_tone)
+add("copy.tags", "Pick the caption tags this app can name", "Make", "make",
+    args=("subject", "platform", "limit"),
+    describe="The tags that go under the caption, each with the evidence that put it there - "
+             "her posts, her writing, her words for the shot, or the week's format. A tag nobody "
+             "can point at is not shown.")(tags_pick)
 add("community.drafts", "Draft the replies", "Make", "queue",    describe="Writes replies to the comments she pasted in and refuses the ones needing a "
              "fact only she has. Nothing is sent.")(reply_drafts)
 add("queue.stage", "Stage a day for posting", "Brief", "queue", needs=("plan", "answers"),
