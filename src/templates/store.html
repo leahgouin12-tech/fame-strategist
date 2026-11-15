@@ -48,8 +48,13 @@ an empty list below means no build has been dropped in yet, not a broken button.
         <code>ios\</code> on a free macOS runner with XcodeGen and Apple&rsquo;s
         <code>xcodebuild</code>, then zips the built app into <code>FameStrategist.ipa</code> and
         uploads it as a download. Signing is deliberately turned off in that file because the
-        certificate is yours, not the runner&rsquo;s. <strong>Done:</strong> run #6 finished green on
-        2026-11-15 and the artifact is <code>fame-strategist-ipa</code>.</li>
+        certificate is yours, not the runner&rsquo;s. <strong>Done:</strong> run #6 compiled green on
+        2026-11-15 and run #7 is the current artifact, both published as
+        <code>fame-strategist-ipa</code>. That build still reports four warnings, and they are
+        honest ones: the icon set has no 1024&times;1024 or iPad sizes, because the largest real
+        artwork in this project is <code>src/static/icon-512.png</code> and nothing here is going to
+        pretend a blown-up copy is high resolution. iPhone icons install and display fine without
+        them; only an App Store submission would refuse.</li>
       <li><strong>Put the file where this page can see it.</strong> Unzip the artifact into
         <code>data\packages</code>. This page picks it up on the next reload and the listing file
         below stops being empty &mdash; it is generated from that file&rsquo;s bytes, so the size and
