@@ -12,7 +12,7 @@ the watched word named beside it rather than softened or refused.
 import datetime
 import re
 
-from src.captions import tone
+from src.captions import register, tone
 from src.strategist.voice import _ORPHANS, learn
 
 SHOT = "mirror selfie in the black ribbed tank"
@@ -168,3 +168,66 @@ def test_every_line_carries_the_grammar_it_came_from_and_what_the_tone_costs():
 def test_a_tone_this_app_does_not_have_writes_nothing_rather_than_something_else():
     assert tone.lines("rude", SHOT, LOW, "reels", "photo") == []
     assert tone.tone("CUNTY").id == "cunty" and tone.tone("nonsense") is None
+
+
+SUBJECTS = (SHOT, "boots", "the white linen shirt", "black ribbed tank from the sex shop",
+            "three clips of the same latte", "mirror selfie")
+
+
+def corpus(media="photo", platform="reels", n=6):
+    """Every line the app can actually ship for one tone set, so a rule proved here cannot be
+    satisfied by the three shapes a narrower test happens to look at."""
+    return [c for got in tone.TONES for subject in SUBJECTS
+            for c in tone.lines(got.id, subject, LOW, platform, media, n=n)]
+
+
+def test_no_shipped_line_is_one_of_the_refused_shapes():
+    """The refusal list is only worth having if the surviving corpus is clean: one shape left in
+    a tone with a template in it means the page still prints it."""
+    for c in corpus("photo") + corpus("video", "tiktok"):
+        assert not register.tells(c.text), c.text
+
+
+def test_the_description_is_never_recited_twice():
+    """"the black ribbed black ribbed tank" is what the detail slot looked like when it got
+    concatenated with the whole phrase instead of the noun, and nobody types either version."""
+    for c in corpus("photo") + corpus("video"):
+        assert not re.search(r"\b(\w+(?: \w+){1,2}) \1\b", c.text.lower()), c.text
+
+
+def test_no_candidate_is_the_same_line_as_the_one_next_to_it():
+    """A page that shows the same caption twice has used up a slot without saying anything."""
+    for got in tone.TONES:
+        for media in ("photo", "video"):
+            made = tone.lines(got.id, SHOT, LOW, "tiktok", media, n=6)
+            texts = [c.text.strip().lower() for c in made]
+            assert len(texts) == len(set(texts)), (got.id, media, texts)
+
+
+def test_a_hook_that_repeats_the_line_it_fronts_does_not_get_glued_on_front_of_it():
+    """The repeat hides in two places - both clauses opening on the same three words, and the hook
+    ending on the words the line opens with - so the sweep checks the seam as well as the front.
+    When it fires, the line ships alone and the hook is written underneath it."""
+    for c in corpus("video", "tiktok"):
+        halves = [h.strip() for h in re.split(r"[.!?]\s+", c.text) if h.strip()]
+        for a, b in zip(halves, halves[1:]):
+            assert tone._echo(a, b) < 3, c.text
+
+
+def test_the_explanation_never_shows_a_hole_she_was_offered_no_word_for():
+    """The card names the sentence the line was built from. Printing the shape before the slots were
+    filled - `Cunty: the {thing} again` - is the generator showing its template on a page whose whole
+    claim is that it does not."""
+    for c in corpus("photo") + corpus("video", "tiktok"):
+        said = " ".join(c.explain(LOW))
+        assert "{" not in said and "}" not in said, (c.text, said)
+        assert said.startswith(c.tone.name), said
+
+
+def test_no_line_ends_on_a_contraction_with_nothing_after_it():
+    """"more work than i'm" is a clause that stops mid-thought: the contraction pass refuses it,
+    and the sweep proves no shape got one back in through the side door."""
+    for c in corpus("photo") + corpus("video"):
+        last = c.text.rstrip(" .!?").split()[-1]
+        assert not last.endswith("'m"), c.text
+        assert not re.search(r"\b(it|that|this|there|what)'s$", c.text.rstrip(" .!?"), re.I), c.text

@@ -23,8 +23,8 @@ SRC = ROOT / "src"
 TESTS = ROOT / "tests"
 
 DEPARTMENTS = ("Research", "Strategy", "Creation", "Editing", "Repurposing", "Publishing",
-               "Analytics", "Experimentation", "Community", "Monetization", "SEO", "Workflow",
-               "Interface", "This machine")
+               "Analytics", "Experimentation", "Community", "Monetization", "SEO",
+               "Collaboration", "Multilingual", "Workflow", "Interface", "This machine")
 
 # Which department a thing belongs to is decided by the words in what it is called, not by a
 # table of names that goes stale the first time a route is added.
@@ -36,6 +36,13 @@ DEPT_BY_WORD = (
     # Ahead of the rest for the same reason: the SEO module talks about captions, sources,
     # numbers and plans, and every one of those words is lower down this list.
     ("seo", "SEO"), ("discoverab", "SEO"),
+    # Same reason again, and earlier than the community words because a pitch list is full of
+    # accounts, captions and plans that would otherwise be filed under those rooms.
+    ("collab", "Collaboration"), ("pitch", "Collaboration"),
+    # Again the same reason, and this one has to beat the Workflow words: the route is called
+    # `languages_run`, so "run" would file a translation page under Workflow.
+    ("lang", "Multilingual"), ("translat", "Multilingual"), ("kreyol", "Multilingual"),
+    ("multiling", "Multilingual"),
     ("repurpos", "Repurposing"),
     ("bench", "Analytics"), ("number", "Analytics"), ("metric", "Analytics"),
     ("spend", "Analytics"), ("weekly", "Analytics"), ("adapt", "Analytics"),

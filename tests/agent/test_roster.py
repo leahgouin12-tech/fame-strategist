@@ -65,10 +65,50 @@ def test_a_guard_that_only_passes_today_is_not_a_guard():
     ("cut these into story frames", "repurpose"),
     ("rebuild my eight weeks", "strategy"),
     ("what do i shoot today", "producer"),
+    ("who should i pitch for a collab", "collab"),
+    ("translate the caption", "translator"),
+    ("i want this in spanish too", "translator"),
+    ("check the french version against my line", "translator"),
+    ("seo check this caption", "seo"),
+    ("how much should i charge a brand", "money"),
+    ("give me trending hashtags", "voice"),
 ])
 def test_a_sentence_names_the_desk_that_should_do_it(asked, desk):
     got = roster.route(asked)
     assert got is not None and got.id == desk, f"{asked!r} went to {got and got.name}"
+
+
+def test_an_ask_that_names_two_rooms_goes_to_the_one_being_asked_for():
+    """Counting matches equally handed every one of these to whichever desk is early in the
+    tuple: `caption` is The Voice's word and `brand` is The Strategist's, and neither is what
+    she asked for. The language, the audit and the price are."""
+    for asked, wanted in (("translate the caption", "translator"),
+                          ("write this in kreyol", "translator"),
+                          ("seo check this caption", "seo"),
+                          ("how much should i charge a brand", "money"),
+                          ("give me trending hashtags", "voice")):
+        assert roster.route(asked).id == wanted, asked
+    # and a word that is only ever pointed at, not asked for, still counts as one.
+    assert roster.route("what is trending in my niche").id == "research"
+
+
+def test_a_weight_on_a_word_that_never_routes_is_caught():
+    """A strong word has to be one of the desk's own words or the weight is never read, and the
+    mistake is invisible: the desk just quietly loses every tie it was built to win."""
+    lying = roster.Desk("lying", "The Liar", "A desk that weights a word it does not answer to.",
+                        ("research.library",), ("trend",), ("spanish",))
+    with pytest.raises(RuntimeError) as raised:
+        roster.check((lying,))
+    assert "spanish" in str(raised.value)
+
+
+def test_a_word_only_counts_when_it_starts_one():
+    """`lab` belongs to The Experimenter and `collab` to The Broker, and plain substring
+    matching sent every pitch ask to the lab on the strength of the three letters inside it."""
+    assert roster.route("should i do a collab with the vintage girl").id == "collab"
+    assert roster.route("what did the lab say").id == "experiment"
+    assert roster.route("what is trending in my niche").id == "research", \
+        "the ending stays open, so a word with a suffix on it still counts"
 
 
 def test_an_ask_that_names_nobody_routes_to_no_desk():

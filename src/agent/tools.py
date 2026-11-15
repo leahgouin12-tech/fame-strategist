@@ -24,6 +24,11 @@ from src.experiment import repurpose
 from src import accounts
 from src.captions import tags as tag_tool
 from src.captions import tone as tones
+from src.captions import voice_register as caption_kit
+from src.collab import pitch
+from src.collab import store as collab_store
+from src import language
+from src.language import localise
 from src.media.aesthetic import WEIGHTS, judge_photo
 from src.media.edit import PRESETS, edit_file
 from src.media.judge import measure
@@ -476,12 +481,12 @@ def _caption_platform(kit, platform: str) -> str:
 
 
 def copy_tone(kit, subject: str = "", tone_id: str = "", platform: str = "", media: str = ""):
-    """The same shot in six temperatures, out of her own words and her own casing.
+    """The same shot in six temperatures, out of her own words and in her own typing.
 
     With no description of the frame it falls back to the footage line from the interview,
     because that is the only sentence this app holds about what she actually films.
     """
-    profile = voice.learn(kit.db.get_voice())
+    profile, reg = caption_kit(kit.db)
     place = _caption_platform(kit, platform)
     key = accounts.caption_key(place)
     answers = kit.answers()
@@ -495,11 +500,15 @@ def copy_tone(kit, subject: str = "", tone_id: str = "", platform: str = "", med
         return skipped(f"{tone_id!r} is not one of the tones this app writes: "
                        + ", ".join(t.id for t in tones.TONES) + ".")
     today = date.today()
-    cards = [{"tone": t.id, "name": t.name,
-              "lines": [{"text": c.text, "words": c.words, "shape": c.shape,
-                         "watched": c.watched, "why": c.explain(profile)}
-                        for c in tones.lines(t.id, asked, profile, key, media, today=today)]}
-             for t in picked]
+    refused = []
+    cards = []
+    for t in picked:
+        rep = {}
+        got = tones.lines(t.id, asked, profile, key, media, today=today, reg=reg, report=rep)
+        refused.extend({"tone": t.id, **d} for d in rep.get("tells", []))
+        cards.append({"tone": t.id, "name": t.name,
+                      "lines": [{"text": c.text, "words": c.words, "shape": c.shape,
+                                 "watched": c.watched, "why": c.explain(profile)} for c in got]})
     written = sum(len(c["lines"]) for c in cards)
     if not written:
         return advised("No line written: every shape those tones have asks for a detail of the "
@@ -508,11 +517,13 @@ def copy_tone(kit, subject: str = "", tone_id: str = "", platform: str = "", med
     return advised(
         f"{written} line{'s' if written != 1 else ''} for {len(cards)} tone"
         f"{'s' if len(cards) != 1 else ''} out of {asked!r} for {place}"
-        + (", in the casing your samples show" if profile.learned
-           else " - your voice is unlearned, so the casing is the app's") + ".",
+        + (f", typed the way {reg.source} show" if reg.learned
+           else " - your voice is unlearned, so this is the app's own typing")
+        + (f". {len(refused)} shape{'s' if len(refused) != 1 else ''} dropped for reading like a "
+           "template rather than softened." if refused else "."),
         subject=asked, fills=tones.slots(asked, today, media), platform=place,
-        media=media or "photo",
-        voice=profile.samples, cards=cards, where="/captions")
+        media=media or "photo", voice=profile.samples, register=reg.source,
+        cards=cards, dropped=refused, where="/captions")
 
 
 def tags_pick(kit, subject: str = "", platform: str = "", limit: int = 0):
@@ -586,6 +597,167 @@ def seo_read(kit, text: str = "", platform: str = ""):
         spent=got["spent"], alt=alt, platform=place, fold=seo.FRONT,
         rules=seo.rules(kit.entries()), why_short=seo.gaps(rows, samples, plan),
         cannot=seo.CANNOT, checked_from=checked, where="/seo")
+
+
+# ---- collaboration ----------------------------------------------------------
+
+def collab_offer(kit):
+    """What she can put in a pitch, and how her own asks have gone.
+
+    The names are never invented. This app has no login on any platform, does not search for
+    creators and does not rank strangers, so the shortlist can only be the people she put on it,
+    and the honest answer when that list is empty is that it is empty. The numbers are arithmetic
+    on her import: a platform with one post behind it is still shown, labelled as the one
+    afternoon it is, because refusing to say a median out loud would lose her the only number she
+    has.
+    """
+    got = pitch.offers(kit.rows())
+    stored = collab_store.load(kit.db)
+    got_funnel = pitch.funnel(stored)
+    lead = (f"Your import gives {len(got)} platform{'s' if len(got) != 1 else ''} to quote from: "
+            + ", ".join(f"{o.platform} ({o.posts} post{'s' if o.posts != 1 else ''}, median "
+                        f"{o.median_views:,} views)" for o in got)) if got else (
+        "Nothing has been imported, so there is no number of yours a pitch can quote yet - each "
+        "one leads with the work and says so")
+    who = (f"{len(stored)} on your list: " + ", ".join(c["name"] for c in stored) if stored else
+           "Nobody is on the list yet, and nothing here can find names for you")
+    parts = [f"{lead}.", who + "."]
+    if stored:
+        # The funnel sentence already counts what was sent and what came back, so it is repeated
+        # rather than paraphrased - a second set of numbers would only be a chance to disagree.
+        meaning = got_funnel["meaning"]
+        parts.append(meaning[0].upper() + meaning[1:] + ".")
+    return advised(
+        " ".join(parts),
+        offers=[o.as_dict() for o in got],
+        list=[{"name": c["name"], "status": c["status"], "why": c["why"],
+               "platform": c["platform"]} for c in stored],
+        funnel=got_funnel, thin=[o.platform for o in got if o.thin], floor=pitch.MIN_POSTS,
+        min_asks=pitch.MIN_ASKS, cannot=pitch.CANNOT, where="/collab")
+
+
+def collab_pitch(kit, name: str = "", why: str = "", ask: str = "", shape: str = "",
+                 platform: str = ""):
+    """The pitch for one name, built only out of her reason and her own numbers.
+
+    What is already filed under that name is used unless she says something fresher now, and a
+    name that is not on the list with no reason attached gets the refusal rather than an invented
+    compliment - a reason this app made up is a sentence she would have to send and then explain.
+    Nothing sends: the copy comes back for her to put in their inbox.
+    """
+    wanted = (name or "").strip()
+    stored = collab_store.load(kit.db)
+    on_file = next((c for c in stored
+                    if (c.get("name") or "").strip().lower() == wanted.lower()), None)
+    if not wanted:
+        return skipped("no name to write it for"
+                       + (" - on your list: " + ", ".join(c["name"] for c in stored) if stored
+                          else ", and the list is empty"))
+    chosen = (why or "").strip() or (on_file or {}).get("why", "")
+    if not chosen:
+        return skipped(
+            f"{wanted} is not on the list and no reason came with the ask, so nothing was written. "
+            "Say the specific thing you noticed about their account - a compliment this app "
+            "guessed is a line you would have to send and then explain - or put them on the list "
+            "first.")
+    got = pitch.offers(kit.rows())
+    place = (platform or "").strip() or (on_file or {}).get("platform", "")
+    candidate = {"name": wanted, "why": chosen, "ask": (ask or "").strip()
+                 or (on_file or {}).get("ask", ""), "format": (shape or "").strip()
+                 or (on_file or {}).get("format", ""), "platform": place}
+    got_pitch = pitch.brief_for(candidate, got)
+    lines = got_pitch["lines"]
+    held = got_pitch["held"]
+    return advised(
+        f"A pitch for {wanted} in {len(lines)} line{'s' if len(lines) != 1 else ''}, "
+        + (f"led by your own numbers: {got_pitch['numbers']}." if got_pitch["numbers"]
+           else "with no number in it, because nothing of yours has been imported for that "
+                "platform - the work does the talking and the line says so.")
+        + (f" {len(held)} thing{'s' if len(held) != 1 else ''} held back: "
+           + "; ".join(held) + "." if held else " Nothing held back."),
+        pitch=got_pitch, lines=lines, text=got_pitch["text"], held=held,
+        platform=place or (got[0].platform if got else ""),
+        from_list=on_file is not None, cannot=pitch.CANNOT, where="/collab")
+
+
+# ---- other languages --------------------------------------------------------
+
+def _codes(asked: str) -> list:
+    return [c for c in (asked or "").replace(",", " ").split() if c]
+
+
+def lang_localise(kit, text: str = "", codes: str = "", platform: str = "", media: str = "photo",
+                  keep: str = ""):
+    """The caption carried into another language, or the brief a person needs to carry it.
+
+    The offline branch is why this is a tool and not a chat prompt: with no model connected it
+    says that plainly, writes no sentence in another language, and hands back what a version has to
+    fit. This app keeps no dictionary, and a translation assembled out of word lists would be a
+    guess in a font that looks like an answer.
+    """
+    asked = (text or "").strip() or (kit.db.get_staged().get("caption") or "").strip()
+    if not asked:
+        return skipped("there is no caption to carry - nothing was typed and the composer is "
+                       "holding no line, so there is nothing of yours to translate.")
+    wanted = language.targets(kit.db, _codes(codes))
+    if not wanted:
+        return skipped("no language was picked, and this app will not choose your audience for "
+                       "you. Pick from: "
+                       + ", ".join(f"{one.code} ({one.name})" for one in localise.languages()) + ".")
+    place = _caption_platform(kit, platform)
+    got = localise.ask(kit.engine, asked, wanted, platform=place, media=media,
+                       keep=language.keep(kit.db, keep))
+    if not got.ran:
+        return advised(f"Nothing was written in another language. {got.why}",
+                       source=asked, platform=place, media=media,
+                       briefs=[b.as_dict() for b in got.briefs], where="/languages")
+    bad = [v for v in got.versions if not v.ok]
+    return advised(
+        f"{len(got.versions) - len(bad)} of {len(got.versions)} versions passed the check against "
+        f"your line for {', '.join(wanted)}"
+        + (f"; {len(bad)} came back with something to look at and are listed with it." if bad
+           else "."),
+        source=asked, platform=place, media=media, said_by=got.said_by,
+        versions=[v.as_dict() for v in got.versions], where="/languages")
+
+
+def lang_check(kit, text: str = "", version: str = "", code: str = "", platform: str = "",
+               media: str = "photo", keep: str = ""):
+    """Compare one version against her line, in front of her.
+
+    The list is what this app can verify by reading two strings: a hashtag that vanished, a number
+    that moved, a capital on a line she types lowercase, a full stop she does not use, an emoji she
+    did not add, a line over the budget, and a version that quietly came back still in English. It
+    is not a verdict on whether the sentence sounds native - nothing on this machine can say that,
+    and the answer says so rather than clearing the line.
+    """
+    source = (text or "").strip() or (kit.db.get_staged().get("caption") or "").strip()
+    if not source:
+        return skipped("there is no line of yours to compare against.")
+    if not (version or "").strip():
+        return skipped("no version was given, so there was nothing to check.")
+    picked = (code or "").strip().lower()
+    if not localise.get(picked):
+        found = localise.detect(source)
+        picked = found.code
+    place = _caption_platform(kit, platform)
+    problems = localise.check(source, version.strip(), picked, place, media,
+                              language.keep(kit.db, keep))
+    named = localise.get(picked)
+    budget = localise.budget_for(place, picked, media)
+    if problems:
+        return advised(f"{len(problems)} thing{'' if len(problems) == 1 else 's'} to look at in "
+                       "that version: " + "; ".join(problems) + ".",
+                       source=source, version=version.strip(), language=picked,
+                       budget=budget, words=len(version.split()),
+                       where="/languages")
+    return advised(
+        f"Nothing to report: the locked tokens are in it, it is inside the {budget} words this "
+        f"page allows for {'a ' + named.name if named else 'a'} {media} on {place}, and it keeps "
+        "your casing and your punctuation. That is a comparison with your line, not a native "
+        "reader's opinion - nobody on this machine can give you that one.",
+        source=source, version=version.strip(), language=picked, budget=budget,
+        words=len(version.split()), where="/languages")
 
 
 # ---- community & queue ------------------------------------------------------
@@ -774,6 +946,28 @@ add("seo.audit", "Read the post for what a search could land on", "SEO", "analys
              "in front of the fold or only inside a tag, what the alt field carries and which tag "
              "slots restate the caption. Search volume, rank and index status are reported as "
              "unknowable rather than guessed.")(seo_read)
+add("collab.offer", "Say what you have to offer", "Collaboration", "analyse",
+    describe="What your own import makes quotable on each platform, the names already on your "
+             "list with the stage you left each one at, and how many asks came back. It never "
+             "names a creator for you: nothing here searches, ranks or reads another "
+             "account.")(collab_offer)
+add("collab.pitch", "Write the pitch for one name", "Collaboration", "make",
+    args=("name", "why", "ask", "shape", "platform"),
+    describe="Four moves out of your reason, your ask and your own numbers. A name with no "
+             "reason attached gets a refusal instead of an invented compliment, and the copy is "
+             "yours to send - this app has no login on any platform.")(collab_pitch)
+add("lang.localise", "Carry the caption into another language", "Multilingual", "make",
+    args=("text", "codes", "platform", "media", "keep"),
+    describe="Versions in her other languages, each one checked against her line for the hashtag, "
+             "the handle, the number, the brand, the word budget, her casing and her punctuation. "
+             "With no model connected it writes nothing in another language and returns the brief "
+             "instead - this app has no dictionary and will not guess at one.")(lang_localise)
+add("lang.check", "Compare a version against your line", "Multilingual", "analyse",
+    args=("text", "version", "code", "platform", "media", "keep"),
+    describe="What is wrong with one translation, and only what can be verified by reading two "
+             "strings: a locked token that vanished, a number that moved, a full stop or a capital "
+             "she does not use, an added emoji, a line over budget, a version that came back still "
+             "in English. It never claims the sentence sounds native.")(lang_check)
 add("community.drafts", "Draft the replies", "Make", "queue",
     describe="Writes replies to the comments she pasted in and refuses the ones needing a "
              "fact only she has. Nothing is sent.")(reply_drafts)

@@ -10,6 +10,7 @@ This is also why the desk list is as long as it is and no longer: it is derived 
 that exist on this laptop, so every name on the page can be clicked, runs real code and leaves a
 real step in the history. A department with no tool in it gets no card.
 """
+import re
 from dataclasses import dataclass
 
 from src.agent.tools import REGISTRY
@@ -17,12 +18,17 @@ from src.agent.tools import REGISTRY
 
 @dataclass(frozen=True)
 class Desk:
-    """One named group of tools, the words that hand it work, and the line on its card."""
+    """One named group of tools, the words that hand it work, and the line on its card.
+
+    `strong` decides the asks that name two rooms: in "translate the caption" the caption is
+    the thing she is pointing at and the language is the thing she is asking for, so the
+    language word counts for three and the desk being asked for wins."""
     id: str
     name: str
     line: str
     tools: tuple
     words: tuple
+    strong: tuple = ()
 
     def owns(self, tool_id: str) -> bool:
         return tool_id in self.tools
@@ -64,13 +70,21 @@ DESKS = (
          "temperature she asks for, picks the tags it can account for, and drafts the replies.",
          ("copy.packs", "copy.tone", "copy.tags", "community.drafts"),
          ("caption", "hook", "write", "copy", "reply", "replies", "comment", "what do i say",
-          "wording", "tone", "cunty", "funny", "aesthetic", "selfie", "hashtag")),
+          "wording", "tone", "cunty", "funny", "aesthetic", "selfie", "hashtag"),
+         # "trending hashtags" names The Scout's word and this desk's tool; copy.tags is the one
+         # that answers it.
+         ("hashtag",)),
     Desk("seo", "The Signpost",
          "Reads a post for the words a search could land on - only the ones her own posts, "
          "captions and plan can account for, and never a volume figure it cannot check.",
          ("seo.audit",),
          ("seo", "search", "searchable", "discover", "keyword", "alt text", "alt", "indexed",
-          "index", "findable", "get found", "rank", "who is finding this")),
+          "index", "findable", "get found", "rank", "who is finding this"),
+         # "seo" and "alt" beat The Voice's "caption": "seo check this caption" is an audit
+         # that happens to be about a caption. Plain "search" stays weak so a search of the
+         # sourced library still reaches The Scout.
+         ("seo", "alt", "alt text", "keyword", "indexed", "index", "findable", "searchable",
+          "discover")),
     Desk("metrics", "The Analyst",
          "Reads the numbers she typed, names a window from her own history and proposes the "
          "adjustment.",
@@ -93,7 +107,27 @@ DESKS = (
          "the label that has to be on it.",
          ("money.quote", "money.label"),
          ("charge", "paid", "money", "sponsor", "brand deal", "rate card", "invoice", "quote",
-          "gifted", "disclosure", "is this an ad", "label", "how much should i ask")),
+          "gifted", "disclosure", "is this an ad", "label", "how much should i ask"),
+         # "how much should i charge a brand" carries The Strategist's word `brand` and this
+         # desk's whole job, so the pricing words decide it.
+         ("charge", "rate card", "invoice", "brand deal", "is this an ad",
+          "how much should i ask")),
+    Desk("collab", "The Broker",
+         "Works out what she has to offer from her own import, writes the pitch out of the "
+         "reason she gave, and keeps the count of who she asked. It never names a stranger and "
+         "never sends anything.",
+         ("collab.offer", "collab.pitch"),
+         ("collab", "collaboration", "pitch", "pitched", "swap", "duet", "stitch", "shoutout",
+          "partner", "work with", "who should i ask", "grow together", "guest")),
+    Desk("translator", "The Translator",
+         "Carries a caption she already wrote into Spanish, French, Kreyòl or Portuguese and "
+         "checks what comes back against her line - the tag, the handle, the number, the brand, "
+         "the word budget, her casing. It keeps no dictionary, so with no model connected it "
+         "writes nothing and hands back the brief a person would need instead.",
+         ("lang.localise", "lang.check"),
+         ("spanish", "french", "kreyol", "creole", "portuguese", "haitian", "translat",
+          "multiling", "language", "in another language", "other language", "same post in"),
+         ("spanish", "french", "kreyol", "creole", "portuguese", "translat", "multiling")),
 )
 
 
@@ -111,6 +145,10 @@ def check(desks) -> None:
                 raise RuntimeError(f"{tool_id} sits on {seen[tool_id].name} and {desk.name}; a "
                                    "tool answers to one desk.")
             seen[tool_id] = desk
+        for word in desk.strong:
+            if word not in desk.words:
+                raise RuntimeError(f"{desk.name} weights {word}, which is not a word that hands "
+                                   "it work - the weight would never be read.")
     unowned = sorted(set(REGISTRY) - set(seen))
     if unowned:
         raise RuntimeError(f"no desk owns {', '.join(unowned)} - the roster would hide work that "
@@ -122,6 +160,11 @@ check(DESKS)
 
 def desks() -> tuple:
     return DESKS
+
+
+# Compiled once: the words are fixed by the roster, and every ask reads the whole table.
+_AT_START = {word: re.compile(r"(?<!\w)" + re.escape(word))
+             for desk in DESKS for word in desk.words}
 
 
 def by_id(desk_id: str):
@@ -140,13 +183,22 @@ def route(asked: str):
 
     It counts matches rather than taking the first hit, so "research what is working then
     rebuild the plan" goes to the desk with two of its own words in it and not to whichever
-    name happens to be early in the tuple."""
+    name happens to be early in the tuple.
+
+    A word only counts when it starts one, because plain substring matching handed "collab"
+    to The Experimenter on the strength of the `lab` inside it - and the ending stays open so
+    "trend" still catches "trending" and "arm" still catches "arms".
+
+    A strong word counts for three, which is what decides an ask that names two rooms: see
+    Desk.strong.
+    """
     low = (asked or "").lower()
     if not low.strip():
         return None
     best, hits = None, 0
     for desk in DESKS:
-        n = sum(1 for w in desk.words if w in low)
+        n = sum((3 if w in desk.strong else 1) for w in desk.words
+                if _AT_START[w].search(low))
         if n > hits:
             best, hits = desk, n
     return best

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Languages &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Other languages</h1>
+<p class="sub">The caption you already wrote, carried into Spanish, French, Kreyòl or Portuguese
+&mdash; with the hashtag, the @ handle, the number and the brand name held exactly where you put
+them, and a check on everything that comes back.</p>
+<p class="k"><strong>This page does not translate.</strong> A laptop with no server has no
+dictionary, no slang authority and no idea whether a sentence sounds like somebody from Miami wrote
+it, so instead of printing a guess in a confident font it does the two jobs it can honestly do: it
+works out <em>what a version may not touch</em>, and it <em>checks</em> what a model hands back
+against your line. With no model connected it writes nothing in another language and tells you
+so &mdash; then gives you the sheet a person who speaks the language would need.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>The line being carried</h3>
+  <form method="post" action="/languages/run">
+    <label for="text" style="display:block">Your caption, in the language you wrote it
+      <textarea id="text" name="text" rows="3" style="width:100%"
+        placeholder="{{ 'Nothing is staged in the composer, so paste the caption here.' if not text else '' }}">{{ text }}</textarea>
+    </label>
+    <div class="grid">
+      <div>
+        <label for="platform">Where it goes</label>
+        <select id="platform" name="platform">
+          {% for p in places %}
+          <option value="{{ p.id }}" {% if p.id == platform %}selected{% endif %}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="media">What you are posting</label>
+        <select id="media" name="media">
+          {% for m in ("photo", "video", "story") %}
+          <option value="{{ m }}" {% if m == media %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <fieldset style="margin-top:14px">
+      <legend class="k">Which languages</legend>
+      <p class="chipset row">
+        {% for lang in languages %}
+        <label class="chip {{ 'post' if lang.code in picked }}" style="cursor:pointer">
+          <input type="checkbox" name="codes" value="{{ lang.code }}"
+                 {% if lang.code in picked %}checked{% endif %}>
+          {{ lang.name }} &middot; <span class="k tiny">{{ budgets[lang.code] }} words</span>
+        </label>
+        {% endfor %}
+      </p>
+      <p class="k tiny">The word count beside each one is the budget this page allows for that
+        language on a {{ media }} to {{ platform }}. English gets {{ base_words }}. The extra room is
+        this app&rsquo;s own allowance &mdash; a translation needs more words than English because
+        of what those languages are, not because of how you write, and cutting a Spanish line to an
+        English budget would be the app&rsquo;s arithmetic charged to you.</p>
+    </fieldset>
+    <label for="keep" style="display:block;margin-top:14px">Words it must not translate
+      <input type="text" id="keep" name="keep" value="{{ keep }}" style="width:100%"
+             placeholder="your brand, a product name, a handle without the @">
+    </label>
+    <p class="row" style="margin-top:14px">
+      <button type="submit">Ask for versions</button>
+      <button type="submit" class="ghost" formaction="/languages/save">Save as my defaults</button>
+    </p>
+  </form>
+  <p class="k tiny">Working from {{ where }}. Saving changes nothing about the post &mdash; the
+    <a href="/story">composer</a> keeps whatever it is holding.</p>
+  {% if detection %}
+  <p class="k">The line in the box: <strong>{{ detection.name or 'unnamed' }}</strong> &mdash;
+    {{ detection.why }}</p>
+  {% endif %}
+  {% if offline %}
+  <p class="limit">No model is connected, so <em>Ask for versions</em> returns the brief and the
+    reason rather than a sentence in another language. That is the honest answer, not a broken
+    button; the <a href="/engine">machine page</a> is where a key goes.</p>
+  {% endif %}
+</div>
+
+{% if result %}
+{% if not result.ran %}
+<h2>What a version has to fit</h2>
+<div class="card">
+  <p class="need">{{ result.why }}</p>
+</div>
+{% for b in result.briefs %}
+<div class="card">
+  <h3>{{ b.language | upper }} &mdash; {{ b.words }} words, {{ b.tags }} tag{{ '' if b.tags == 1 else 's' }}</h3>
+  <table class="tbl">
+    <tr><th>what is locked</th><td>
+      {% if b.locked %}
+      <p class="chipset row">{% for t in b.locked %}<span class="chip verbatim">{{ t.token }}</span>{% endfor %}</p>
+      <p class="k tiny">Those have to appear in the version exactly as you wrote them.</p>
+      {% else %}
+      <span class="k">Nothing in your line has to survive letter-for-letter &mdash; no tag, no
+        handle, no number, no brand in caps.</span>
+      {% endif %}
+    </td></tr>
+    <tr><th>your shorthand</th><td>
+      {% if b.voice %}
+      <p class="chipset row">{% for t in b.voice %}<span class="chip verbatim">{{ t.token }}</span>{% endfor %}</p>
+      <p class="k tiny">Not locked, because another language has its own text-talk. What is not
+        acceptable is a version that spells them out into formal words &mdash; that is correcting
+        how you type, not translating.</p>
+      {% else %}
+      <span class="k">None in this line.</span>
+      {% endif %}
+    </td></tr>
+    <tr><th>the shape</th><td class="k">{{ b.shape }}</td></tr>
+    <tr><th>watch out</th><td class="k">{{ b.watch }}</td></tr>
+  </table>
+  {% if text %}
+  <p class="row" style="margin-top:12px">
+    <button type="button" class="tiny-btn copy-line"
+            data-copy="Caption to carry: {{ text }}
+Do not translate: {{ b.locked | map(attribute='token') | join(', ') or 'nothing beyond the sentence itself' }}
+Stay inside {{ b.words }} words. Match my casing and my punctuation - no full stop unless I use one. Do not add an emoji or a call to action.
+{{ b.watch }}">Copy this brief</button>
+    <span class="k tiny copy-note"></span>
+  </p>
+  <p class="k tiny">Hand it to whoever speaks the language, or paste it into any model. It says
+    what your line cannot lose, which is the part a machine guess usually breaks.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% else %}
+<h2>Versions</h2>
+<p class="k">{{ result.why }} Written by <strong>{{ result.said_by }}</strong>. A version that
+  failed the check is still here, with what failed beside it &mdash; hiding it would leave you the
+  one who finds it.</p>
+{% for b in result.briefs %}
+{% set group = result.versions | selectattr("language", "equalto", b.language) | list %}
+<div class="card">
+  <h3>{{ b.language | upper }}</h3>
+  {% if not group %}
+  <p class="k">Nothing came back for this one.</p>
+  {% endif %}
+  {% for v in group %}
+  <div class="cs-block">
+    <p class="captext">{{ v.text }}</p>
+    <p class="row">
+      <button type="button" class="tiny-btn copy-line" data-copy="{{ v.text }}">Copy</button>
+      <span class="k tiny">{{ v.words }}/{{ b.words }} words</span>
+      {% if v.ok %}
+      <span class="chip post">passed the check</span>
+      {% else %}
+      <span class="chip fix">{{ v.problems | length }} to look at</span>
+      {% endif %}
+      <span class="k tiny copy-note"></span>
+    </p>
+    {% if v.note %}<p class="k tiny">The model says: {{ v.note }}</p>{% endif %}
+    {% if v.problems %}
+    <ul class="assume">{% for p in v.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <p class="k tiny">Locked here: {% if b.locked %}{{ b.locked | map(attribute='token') | join(', ') }}{% else %}nothing beyond the sentence itself{% endif %}. Every version above was compared
+    against your line for those, plus the word count, your casing, your punctuation and any emoji
+    it added.</p>
+</div>
+{% endfor %}
+{% endif %}
+{% endif %}
+
+<h2>What this page cannot do</h2>
+<div class="card">
+  <ul class="k">{% for c in cannot %}<li>{{ c }}</li>{% endfor %}</ul>
+  <p class="k tiny">The check is a comparison between your line and the version, so it can only
+    report something the version did to something you wrote. Say &ldquo;put this one in Spanish&rdquo;
+    to the <a href="/agent">Agent</a> and it will answer with the same limits, and with what it
+    actually ran rather than what it suggested.</p>
+</div>
+{% if staged.caption and staged.caption != text %}
+<p class="k">The <a href="/story">composer</a> is holding a different caption from the one worked
+  on here. Copying a version does not overwrite it until you stage it there.</p>
+{% endif %}
+
+<script>
+  function inline_copy(text, note, fail) {
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(box);
+    box.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    box.remove();
+    if (ok) { note.textContent = "Copied."; } else { fail(note); }
+  }
+  function put_on_clipboard(text, note, fail) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        note.textContent = "Copied.";
+      }, () => inline_copy(text, note, fail));
+    } else {
+      /* The phone reaches this app over wifi, not https, so the clipboard API is unavailable
+         there and this is the path it takes. */
+      inline_copy(text, note, fail);
+    }
+  }
+  document.querySelectorAll(".copy-line").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const note = btn.closest(".row").querySelector(".copy-note");
+      put_on_clipboard(btn.getAttribute("data-copy"), note, (n) => {
+        n.textContent = "The browser would not copy it - select the line and copy by hand.";
+      });
+    });
+  });
+</script>
+{% endblock %}

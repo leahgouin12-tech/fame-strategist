@@ -25,6 +25,23 @@ def run(name, im, args):
     return mesh.APPLIERS[name](im, args)
 
 
+def seconds(fn, tries: int = 3):
+    """The fastest of a few attempts, which is the only reading this test can use.
+
+    Something else on the machine can stretch one untimed call from 0.05 s to 4.6 s - that has
+    been measured here, with a second test run in parallel - and a stretched reading looks
+    exactly like the pixel loop the test is meant to catch. Interference only ever adds time, so
+    the shortest attempt is the one nearest the truth.
+    """
+    best = None
+    for _ in range(tries):
+        started = time.time()
+        fn()
+        took = time.time() - started
+        best = took if best is None else min(best, took)
+    return best
+
+
 def diff(im, out):
     return ImageChops.difference(im.convert("RGB"), out.convert("RGB")).convert("L")
 
@@ -281,12 +298,20 @@ def test_a_recipes_brush_caps_at_its_limit():
 
 
 def test_no_operation_falls_back_to_walking_pixels():
-    """The budget is a multiple of one whole-frame Pillow pass, measured on this machine in
-    this moment: a busy laptop shifts both together, and a Python pixel loop costs 100x."""
+    """The budget is a multiple of one whole-frame Pillow pass, measured on this machine.
+
+    The fallback this catches is real and expensive: on an idle laptop here, one brush stroke costs
+    0.04-0.11 s, reading every pixel of the same frame costs 0.33-0.42 s, and the Pillow pass it is
+    compared against costs 0.03-0.06 s - so a 12x ceiling separates a band call from a walk without
+    straining. What it cannot survive on its own is the machine doing something else: the same
+    stroke was measured at 4.62 s against a 0.12 s pass with a second test run in parallel, which
+    is a busy laptop and not a pixel loop. So the pass is timed on both sides of the call and the
+    slower reading is the ruler, and every number is the best of three attempts."""
     preview = marks().resize((900, 1200), Image.NEAREST)
-    started = time.time()
-    ImageChops.add(preview, preview)
-    pass_cost = max(time.time() - started, 0.01)
+
+    def pillow_pass():
+        ImageChops.add(preview, preview)
+
     every = [
         ("swirl", [0.5, 0.5, 0.4, 120.0, 0.45]),
         ("swirl", [0.3, 0.4, 0.3, -90.0, 0.45, 0.7, 0.6, 0.3, 90.0, 0.45]),
@@ -294,8 +319,14 @@ def test_no_operation_falls_back_to_walking_pixels():
         ("inflate", [0.35, 0.45, 0.3, -0.9, 0.45, 0.65, 0.55, 0.3, 0.9, 0.45]),
     ]
     for name, args in every:
-        started = time.time()
-        out = run(name, preview, args)
-        took = time.time() - started
+        out = None
+
+        def once(name=name, args=args):
+            nonlocal out
+            out = run(name, preview, args)
+
+        before = seconds(pillow_pass)
+        took = seconds(once)
+        pass_cost = max(before, seconds(pillow_pass), 0.01)
         assert out.size == preview.size
         assert took < 12 * pass_cost, f"{name} cost {took:.2f} s against a {pass_cost:.2f} s pass"

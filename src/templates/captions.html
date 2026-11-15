@@ -3,18 +3,63 @@
 {% block body %}
 <h1>Caption tones</h1>
 <p class="sub">The same shot, six temperatures. Type what is in the frame and each tone writes
-three lines out of <em>your</em> words, in the casing your voice profile measured &mdash; cunty,
-lit, funny, niche, aesthetic, soft. Below them, the tags this app can account for, each one
-labelled with what put it there.</p>
+three lines out of <em>your</em> words &mdash; cunty, lit, funny, niche, aesthetic, soft. Below
+them, the tags this app can account for, each one labelled with what put it there.</p>
+<p class="k">This page was rebuilt once because the lines were unusable. Three rules came out of
+that, and they hold now: a sentence says <strong>the tank</strong>, not <strong>the black ribbed
+tank</strong> &mdash; nobody recites the colour, the fabric and the item in one breath unless they
+are reading a listing back; every line is contracted, because <em>it is</em> and <em>it&rsquo;s</em>
+are not the same person typing; and the shapes that have circulated as templates for a decade
+&mdash; <em>me: I&rsquo;ll do it once, also me:</em>, <em>does X or does everything</em>,
+<em>obsessed</em>, <em>that&rsquo;s the point</em> &mdash; are dropped and counted, not printed
+with an apology beside them.</p>
 <p class="k">No model call: the lines are built on this machine out of the sentence you typed.
 Nothing here is filtered &mdash; an adult line is written when you ask for one, and the app names
 the word a caption filter is likely to look at instead of refusing to write it.</p>
 
 {% if note %}<p class="need">{{ note }}</p>{% endif %}
+
+<div class="card">
+  <h3>How a line gets typed here</h3>
+  <p class="claim">{{ reg.source }}</p>
+  <table class="parts">
+    <tr><td>casing</td><td>{{ reg.case_style }}{% if not reg.learned %} &mdash; the
+      app&rsquo;s default, not measured{% endif %}</td></tr>
+    <tr><td>end of a line</td><td>{% if reg.end_period %}keeps its period, because yours
+      do{% else %}no period, because yours do not{% endif %}</td></tr>
+    <tr><td>shortened to</td><td>{% if reg.abbrevs %}{{ reg.abbrevs | join(', ') }}{% else
+      %}nothing beyond contractions{% endif %}</td></tr>
+    <tr><td>markers it may use</td><td>{% if reg.markers %}{{ reg.markers | join(', ') }}{% else
+      %}none{% endif %}</td></tr>
+    <tr><td>your booster words</td><td>{% if reg.emphasis %}{{ reg.emphasis | join(', ') }}{%
+      else %}none measured{% endif %}</td></tr>
+    <tr><td>your corrections</td><td>{{ fixes | length }} stored &mdash; a line you rejected once
+      does not come back{% if fixes %} &middot; see the list at the bottom{% endif %}</td></tr>
+  </table>
+  {% for n in reg.notes %}<p class="limit">{{ n }}</p>{% endfor %}
+  <form method="post" action="/captions/style" class="row" style="margin-top:12px">
+    <input type="hidden" name="subject" value="{{ subject }}">
+    <input type="hidden" name="platform" value="{{ platform }}">
+    <input type="hidden" name="media" value="{{ media }}">
+    <label class="k tiny"><input type="checkbox" name="casual" value="1"
+      {% if prefs.casual %}checked{% endif %}> use the casual spellings</label>
+    <label class="k tiny"><input type="checkbox" name="markers" value="1"
+      {% if prefs.markers %}checked{% endif %}> let it add rn / fr / idc where the line already
+      says that</label>
+    <button type="submit" class="ghost tiny-btn">Save how it types</button>
+  </form>
+  <p class="k tiny">These two are yours to switch on, and they stay off until you do. An
+    abbreviation the app guessed is a spelling you would then have to own in front of whoever reads
+    it, which is why nothing pasted means no fake <em>ur</em>. Contractions, casing and terminal
+    punctuation are not switches: they come from your samples or they are stated as the
+    app&rsquo;s default.</p>
+</div>
+
 {% if not profile.learned %}
-<p class="need">Your voice is unlearned, so every line below is in the app&rsquo;s casing, not
+<p class="need">Your voice is unlearned, so every line below is in the app&rsquo;s typing, not
 yours. Paste a few captions you have actually written on the
-<a href="/write">Writer</a> page and the same tones come back sounding like you.</p>
+<a href="/write">Writer</a> page and the same tones come back shortened and punctuated the way you
+leave a line.</p>
 {% endif %}
 
 <div class="card">
@@ -92,6 +137,13 @@ yours. Paste a few captions you have actually written on the
   <p class="limit">Nothing written in this tone: every shape it has asks for a detail of the thing
     itself or a count, and your sentence did not carry one.</p>
   {% endif %}
+  {% set refuse = dropped | selectattr("tone", "equalto", card.tone.name) | list %}
+  {% if refuse %}
+  <p class="limit"><strong>{{ refuse | length }} shape{{ "" if refuse | length == 1 else "s" }}
+    dropped, not softened:</strong>
+    {% for d in refuse %}<em>{{ d.line }}</em> &mdash; {{ d.why }}{% if not loop.last %};{% endif %}
+    {% endfor %}</p>
+  {% endif %}
   {% for c in card.lines %}
   <div class="cs-block">
     <p class="captext">{{ c.text }}</p>
@@ -105,11 +157,58 @@ yours. Paste a few captions you have actually written on the
       <summary class="k tiny">Why this line reads like that</summary>
       <ul class="assume">{% for w in c.explain(profile) %}<li>{{ w }}</li>{% endfor %}</ul>
     </details>
+    <details>
+      <summary class="k tiny">That&rsquo;s not how I&rsquo;d say it</summary>
+      <form method="post" action="/captions/fix">
+        <input type="hidden" name="subject" value="{{ subject }}">
+        <input type="hidden" name="platform" value="{{ platform }}">
+        <input type="hidden" name="media" value="{{ media }}">
+        <input type="hidden" name="line" value="{{ c.text }}">
+        <label class="k tiny" style="display:block">Say it your way &mdash; the whole line, typed
+          out. It is stored as a swap, so every later line that contains
+          <em>{{ c.text }}</em> comes back with your wording instead.
+          <input type="text" name="said" maxlength="200" style="width:100%"
+            placeholder="{{ c.text }}" required></label>
+        <p class="row" style="margin-top:8px"><button type="submit" class="ghost tiny-btn">
+          Fix this wording</button></p>
+      </form>
+    </details>
   </div>
   {% endfor %}
   <p class="k tiny">What this tone costs: {{ card.tone.cost }}</p>
 </div>
 {% endfor %}
+
+<h2>Your corrections</h2>
+<div class="card">
+  {% if fixes %}
+  <p class="k">{{ fixes | length }} wording{{ "" if fixes | length == 1 else "s" }} you changed.
+    Each one is a swap between two sentences you typed, held in the notes table like everything
+    else here &mdash; not a model&rsquo;s impression of your personality, which would have to be
+    guessed at and could not be deleted.</p>
+  {% for f in fixes %}
+  <div class="row" style="align-items:flex-start">
+    <span class="k" style="flex:1">&mdash;&gt; {{ f.body.split('=>')[-1] | trim }}
+      <span class="k tiny">(was: {{ f.body.split('=>')[0] | trim }} &middot; {{ f.seen_at }})</span></span>
+    <form method="post" action="/captions/unfix">
+      <input type="hidden" name="subject" value="{{ subject }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <input type="hidden" name="media" value="{{ media }}">
+      <input type="hidden" name="fix_id" value="{{ f.id }}">
+      <button type="submit" class="ghost tiny-btn">Delete</button>
+    </form>
+  </div>
+  {% endfor %}
+  <p class="k tiny">Deleting one brings the app&rsquo;s own wording back for lines like it. Nothing
+    here rewrites a caption you already posted.</p>
+  {% else %}
+  <p class="big">No corrections yet.</p>
+  <p class="k">Which is the same as saying none have been needed, or that you have not been asked
+    to fix anything yet. Under any line above, <em>That&rsquo;s not how I&rsquo;d say it</em> takes
+    your version and applies it for good &mdash; that is the only way this page learns, and it
+    learns one sentence at a time rather than deciding it knows your voice.</p>
+  {% endif %}
+</div>
 
 <h2>The tags</h2>
 <p class="k">{{ platform }} carries {{ tag_limit }} here &mdash; the number this app reads off the

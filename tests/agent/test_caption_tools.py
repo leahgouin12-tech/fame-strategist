@@ -83,7 +83,8 @@ def test_the_lines_it_counts_are_the_lines_it_hands_back(alone):
             assert line["why"], f"{card['tone']} handed back a line with no account for it"
     assert out.summary.startswith(f"{counted} line"), out.summary
     assert out.detail["where"] == "/captions"
-    assert "in the casing your samples show" in out.summary
+    assert "typed the way 2 of your own captions show" in out.summary, out.summary
+    assert "register" in out.detail and out.detail["register"].startswith("2 of")
 
 
 def test_the_tone_she_names_is_the_tone_she_gets_and_a_wrong_one_says_so(alone):
@@ -101,7 +102,8 @@ def test_a_video_ask_reports_the_media_it_wrote_for(alone):
     out = orchestrator.execute(kit, "copy.tone", {"subject": SHOT, "platform": "tiktok",
                                                  "media": "story"})
     assert out.detail["media"] == "story" and out.detail["platform"] == "tiktok"
-    assert out.detail["fills"]["thing"] == "black ribbed tank"
+    assert out.detail["fills"]["thing"] == "tank", out.detail["fills"]
+    assert out.detail["fills"]["full"] == "black ribbed tank", out.detail["fills"]
     assert out.detail["fills"]["form"] == "story"
     for card in out.detail["cards"]:
         for line in card["lines"]:

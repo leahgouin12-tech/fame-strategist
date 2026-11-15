@@ -70,6 +70,19 @@ def test_a_saved_note_is_recorded_as_a_note_and_says_so(client):
     assert "A token you mint yourself" in note
 
 
+def test_the_token_route_admits_it_has_nothing_to_put_a_token_in(client):
+    """The one claim in this module that used to outrun the build. It told her to paste the
+    access token, and there is no field, no client and no outbound call to any platform anywhere
+    in this app - only to the model. A method that reads like a feature and is not one is the
+    exact thing the guardrails exist for, so the refusal is pinned in the method's own words."""
+    token = next(m for m in accounts.METHODS if m[0] == "token")
+    assert "no field to paste one into" in token[2]
+    assert "reads nothing" in token[2]
+    got = client.post("/accounts/save", data={"platform": "youtube", "handle": "h",
+                                              "method": "token"}, follow_redirects=False)
+    assert "no field to paste one into" in note_of(got), "the page quotes the method, so it inherits it"
+
+
 def test_a_garbage_date_does_not_take_the_page_down(client):
     got = client.post("/accounts/save", data={"platform": "instagram", "handle": "",
                                               "method": "handoff", "last_export": "tuesday"},

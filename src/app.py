@@ -24,7 +24,7 @@ import json
 import re
 import shutil
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -34,16 +34,21 @@ from PIL import Image
 
 from src import net
 from src import accounts
+from src import language
 from src.agent import modes as agent_modes
 from src.agent import orchestrator, tools as agent_tools
 from src.agent import roster as agent_roster
 from src.agent.tools import Kit
 from src.captions import tags as caption_tags
 from src.captions import tone as caption_tones
+from src.captions import voice_register as caption_kit
+from src.collab import pitch
+from src.collab import store as collab_store
 from src.config import DEFAULT_MODEL, Config
 from src.db import DB
 from src.engines.base import Live
 from src.engines.offline import OfflineEngine
+from src.language import localise
 from src.media import clip as clipmod
 from src.media import layers
 from src.media import story
@@ -886,18 +891,26 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         """
         media = media if media in MEDIA_KINDS else "photo"
         platform = accounts.platform_id(platform)
-        profile = voice.learn(db.get_voice())
+        profile, reg = caption_kit(db)
         plan = plan_or_none()
         today = date.today()
         arm = experiment.arm_for(plan, today) if plan else ""
         key = accounts.caption_key(platform)
         rules = voice.PLATFORM_RULES.get(key, voice.PLATFORM_RULES["reels"])
-        cards = [{"tone": t, "lines": caption_tones.lines(t.id, subject, profile, key,
-                                                          media, today=today)}
-                 for t in caption_tones.TONES] if subject.strip() else []
+        dropped = []
+        cards = []
+        if subject.strip():
+            for t in caption_tones.TONES:
+                rep = {}
+                got = caption_tones.lines(t.id, subject, profile, key, media, today=today,
+                                         reg=reg, report=rep)
+                dropped.extend({"tone": t.name, **d} for d in rep.get("tells", []))
+                cards.append({"tone": t, "lines": got})
         rows = metrics_rows()
         return page(request, "captions.html", note=note, subject=subject, platform=platform,
                     media=media, places=accounts.PLATFORMS, profile=profile, cards=cards,
+                    reg=reg, prefs=db.get_caption(), fixes=db.recall("caption-fix"),
+                    dropped=dropped,
                     tones=caption_tones.TONES, tag_list=caption_tags.candidates(
                         platform, subject, profile, rows, arm),
                     tag_limit=caption_tags.limit_for(platform),
@@ -913,6 +926,157 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         """Caption tones and the tag list, both built only out of what she typed and what her
         own numbers already say."""
         return captions_view(request, subject, platform, media, note)
+
+    def captions_back(form, note=""):
+        """Every caption post lands back on the page it came from, with the same shot in the box.
+
+        The placement and the sentence travel in the form as hidden inputs, so they have to be read
+        out of the body: taking them from the query string reloads the page with an empty subject,
+        which is how a correction form ends up teaching the app nothing.
+        """
+        return RedirectResponse("/captions?" + urlencode({
+            "subject": (form.get("subject") or "").strip(),
+            "platform": (form.get("platform") or "instagram").strip(),
+            "media": (form.get("media") or "photo").strip(),
+            "note": note}), status_code=303)
+
+    @app.post("/captions/style")
+    async def captions_style(request: Request):
+        """Her two switches over the app's own typing. Off means off: nothing is inferred from
+        one caption and then applied to the next fifty."""
+        form = await request.form()
+        prefs = {"casual": bool(form.get("casual")), "markers": bool(form.get("markers"))}
+        db.save_caption(prefs)
+        if not prefs["casual"] and not prefs["markers"]:
+            return captions_back(form,
+                                 "Both switches off, so a line now only gets what your own pasted "
+                                 "captions show - contractions, your casing, your punctuation.")
+        return captions_back(form,
+                             "Switched on. Anything the app now shortens or emphasises with is "
+                             "labelled on each line as something you picked, not something it "
+                             "measured.")
+
+    @app.post("/captions/fix")
+    async def captions_fix(request: Request):
+        """The correction loop: the line she rejected, the way she says it, stored as one swap.
+
+        Kept as a literal pair rather than a lesson learned about her personality, because that is
+        what it actually is - and it is why the same line cannot come back next week. A note the
+        app wrote about "her voice" would have to be guessed at; this is a sentence she typed.
+        """
+        form = await request.form()
+        line = (form.get("line") or "").strip()
+        said = (form.get("said") or "").strip()
+        if not line or not said:
+            return captions_back(form,
+                                 "Both halves are needed: the line as it reads now, and the way "
+                                 "you would actually say it. One of them was empty, so nothing was "
+                                 "stored.")
+        if line.lower() == said.lower():
+            return captions_back(form,
+                                 "You sent the same words back, so there was nothing to fix and "
+                                 "nothing was stored.")
+        db.remember("caption-fix", f"{line} => {said}", "caption tones", date.today().isoformat())
+        return captions_back(form,
+                             f"Stored. Every later line containing {line!r} now reads "
+                             f"{said!r} instead, until you delete it from the list below.")
+
+    @app.post("/captions/unfix")
+    async def captions_unfix(request: Request):
+        form = await request.form()
+        ident = (form.get("fix_id") or "").strip()
+        if not ident.isdigit():
+            return captions_back(form, "No correction id came with that, so nothing was deleted.")
+        db.forget(int(ident))
+        return captions_back(form,
+                             "That correction is gone, so the app's own wording comes back for "
+                             "lines like it.")
+
+    def languages_view(request, text="", platform="", media="photo", codes=(), keep="",
+                       note="", result=None):
+        """The same caption in the other languages she posts in - or the sheet a person who speaks
+        them would need.
+
+        The line defaults to the one the composer is holding, so this is a pass over the real post
+        rather than a second box to write captions in. What it never does is translate: this app has
+        no dictionary, and a version assembled out of a word list would be a guess wearing an
+        answer's clothes. With no model connected the page says so and hands back the brief.
+        """
+        media = media if media in MEDIA_KINDS else "photo"
+        staged = db.get_staged()
+        platform = accounts.platform_id(platform or staged.get("platform") or "instagram")
+        text = (text or "").strip()
+        where = "the line you typed"
+        if not text:
+            text = (staged.get("caption") or "").strip()
+            if text:
+                where = "the post staged in the composer"
+        saved = db.get_language()
+        picked = [code for code in (codes or []) if localise.get(code)] or [
+            code for code in saved["targets"] if localise.get(code)]
+        return page(request, "languages.html", note=note, text=text, platform=platform,
+                    media=media, places=accounts.PLATFORMS, where=where, picked=picked,
+                    languages=localise.languages(), keep=language.keep(db, keep),
+                    saved_keep=saved["keep"], result=result, cannot=localise.CANNOT,
+                    detection=localise.detect(text) if text else None, staged=staged,
+                    base_words=localise.budget_for(platform, "", media),
+                    budgets={lang.code: localise.budget_for(platform, lang.code, media)
+                             for lang in localise.languages()},
+                    shapes={lang.code: localise.shape_for(platform)
+                            for lang in localise.languages()})
+
+    @app.get("/languages", response_class=HTMLResponse)
+    def languages_page(request: Request, text: str = "", platform: str = "",
+                       media: str = "photo", note: str = ""):
+        """Multilingual: the locked list, the budget and the check - and a model only when one is
+        connected."""
+        return languages_view(request, text, platform, media, (), "", note)
+
+    @app.post("/languages/run", response_class=HTMLResponse)
+    async def languages_run(request: Request):
+        """Ask for versions and check every one. A version that fails stays on the page with what
+        failed beside it; hiding it would leave her the one who finds it."""
+        form = await request.form()
+        text = str(form.get("text", "") or "")
+        platform = str(form.get("platform", "") or "")
+        media = str(form.get("media", "photo") or "photo")
+        codes = [code for code in form.getlist("codes") if localise.get(code)]
+        keep = str(form.get("keep", "") or "")
+        if not text.strip():
+            return languages_view(request, text, platform, media, codes, keep,
+                                  "There was no caption in the box, so there was nothing to ask "
+                                  "for. Stage a post or type the line you want in another language.")
+        picked = language.targets(db, codes)
+        if not picked:
+            return languages_view(request, text, platform, media, codes, keep,
+                                  "No language is ticked, and this app will not pick one for you - "
+                                  "the default would be somebody else's audience.")
+        try:
+            got = localise.ask(engine, text.strip(), picked,
+                               platform=platform, media=media,
+                               keep=language.keep(db, keep), n=2)
+        except Exception as exc:
+            return languages_view(request, text, platform, media, codes, keep,
+                                  f"The ask did not come back ({type(exc).__name__}). Nothing was "
+                                  "written in another language and nothing was made up instead.")
+        return languages_view(request, text, platform, media, codes, keep, "", got)
+
+    @app.post("/languages/save", response_class=HTMLResponse)
+    async def languages_save(request: Request):
+        """Her languages and her keep-list, stored. Both may be empty, and empty means the app
+        assumes nothing about who reads her posts."""
+        form = await request.form()
+        codes = [code for code in form.getlist("codes") if localise.get(code)]
+        words = " ".join(str(form.get("keep", "") or "").replace(",", " ").split())
+        db.save_language({"targets": codes, "keep": words})
+        names = ", ".join(localise.get(code).name for code in codes) or "no language"
+        back = RedirectResponse("/languages?" + urlencode({
+            "text": (form.get("text") or "").strip(),
+            "platform": (form.get("platform") or "instagram").strip(),
+            "media": (form.get("media") or "photo").strip(),
+            "note": f"Saved: {names}" + (f", and {len(words.split())} word(s) it will not "
+                                         f"translate." if words else ".")}), status_code=303)
+        return back
 
     def seo_view(request, text="", alt="", platform="", note=""):
         """One post read against the only phrases this app can account for.
@@ -965,6 +1129,65 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         form = await request.form()
         got = {key: str(form.get(key, "") or "") for key in ("text", "alt", "platform")}
         return seo_view(request, got["text"], got["alt"], got["platform"])
+
+    def collab_view(request, note=""):
+        """Who to pitch, worked out only from the numbers she already imported.
+
+        The offer is arithmetic on her own posts and nothing else: no figure from another
+        account is reachable from a machine with no login and no server, so the page never
+        pretends to know what a potential partner reaches. The reason for each pitch has to come
+        from her too - a reason this app made up is a line she would have to send and then
+        explain, so an entry with no reason in it gets the refusal printed rather than a
+        plausible sentence pasted in.
+        """
+        rows = metrics_rows()
+        got = pitch.offers(rows)
+        candidates = collab_store.load(db)
+        for row in candidates:
+            row["brief"] = pitch.brief_for(row, got)
+        return page(request, "collab.html", note=note, offers=got, candidates=candidates,
+                    funnel=pitch.funnel(candidates), stages=pitch.STATUSES,
+                    places=accounts.PLATFORMS, cannot=pitch.CANNOT,
+                    empty=collab_store.note(candidates, got), n_rows=len(rows),
+                    floor=pitch.MIN_POSTS)
+
+    @app.get("/collab", response_class=HTMLResponse)
+    def collab_page(request: Request, note: str = ""):
+        """Collaboration: the people she wants to work with, what she has to offer, the pitch,
+        and where her own asks got to - with nothing sent by anything but her."""
+        return collab_view(request, note)
+
+    @app.post("/collab/add", response_class=HTMLResponse)
+    async def collab_add(request: Request):
+        """File one name and her reason for it. The name is the only thing required: a pitch
+        without a reason refuses to write itself later, it does not lose the entry now."""
+        form = await request.form()
+        row = {key: str(form.get(key, "") or "") for key in collab_store.FIELDS}
+        made, reason = collab_store.add(db, row, date.today().isoformat())
+        if made is None:
+            return RedirectResponse("/collab?note=" + quote(reason), status_code=303)
+        return RedirectResponse("/collab?note=" + quote(
+            f"{row['name']} is on the list. The pitch below it is built out of what you typed - "
+            "if the reason is thin it will say so instead of inventing one."), status_code=303)
+
+    @app.post("/collab/move", response_class=HTMLResponse)
+    async def collab_move(request: Request):
+        """She says where an ask got to. This app cannot see a reply arrive, so a stage only
+        moves when she moves it, and a stage it does not recognise is refused out loud."""
+        form = await request.form()
+        reason = collab_store.move(db, form.get("id", ""), form.get("status", ""),
+                                   date.today().isoformat())
+        return RedirectResponse("/collab?note=" + quote(
+            reason or "Marked. The funnel above counts what you said happened, not what this "
+                      "app could watch."), status_code=303)
+
+    @app.post("/collab/forget", response_class=HTMLResponse)
+    async def collab_forget(request: Request):
+        form = await request.form()
+        gone = collab_store.drop(db, form.get("id", ""))
+        return RedirectResponse("/collab?note=" + quote(
+            "Off the list. Nothing was ever sent, so there is nothing to unsend." if gone
+            else "There was no entry there to take off."), status_code=303)
 
     def repurpose_view(request, passed=None, note=""):
         """The page in either state: what it would rebuild, or what it did. The candidate list

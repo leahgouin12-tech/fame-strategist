@@ -11,6 +11,7 @@ the page with the watch note beside them instead of a softened line.
 
 import re
 from html import unescape
+from urllib.parse import unquote_plus
 
 import pytest
 from fastapi.testclient import TestClient
@@ -59,7 +60,7 @@ def test_all_six_temperatures_answer_the_same_shot(world):
 
 def test_the_copy_button_carries_the_line_it_shows(world):
     body = world.get("/captions", params={"subject": SHOT}).text
-    shown = re.findall(r'<p class="captext">([^<]+)</p>', body)
+    shown = [unescape(x) for x in re.findall(r'<p class="captext">([^<]+)</p>', body)]
     copied = re.findall(r'data-copy="([^"]+)"', body)
     assert shown and shown == [unescape(c) for c in copied], (shown, copied)
 
@@ -174,3 +175,87 @@ def test_the_staged_post_is_not_overwritten_by_a_copy(world):
         assert 'href="/story"' in body
     assert "the old line from the composer" not in body.split("cs-block")[1], \
         "the staged caption was rendered as a new suggestion"
+
+
+def test_the_page_says_how_a_line_got_typed_and_where_that_came_from(world):
+    """The register card is the page admitting what it knows: the casing, the period, the
+    abbreviations, the markers, her corrections - and, with nothing pasted, that every one of
+    those is the app's own default rather than a claim about her."""
+    body = page(world)
+    assert "How a line gets typed here" in body
+    assert "the app&#39;s default, because nothing is pasted" in world.get(
+        "/captions", params={"subject": SHOT}).text
+    for part in ("casing", "end of a line", "shortened to", "markers it may use",
+                 "your booster words", "your corrections"):
+        assert part in body, part
+    assert "0 stored" in body
+
+
+def test_the_two_switches_change_the_page_and_stay_set(world):
+    """These are hers to turn on, so the page has to remember them and show them as on - a
+    switch that resets on reload is a button that does nothing."""
+    saved = world.post("/captions/style", data={"casual": "1", "markers": "1", "subject": SHOT},
+                       follow_redirects=False)
+    assert saved.status_code == 303
+    assert unquote_plus(saved.headers["location"]).startswith(
+        "/captions?subject=" + SHOT + "&platform=instagram&media=photo"), \
+        "the switches landed her back on an empty box"
+    body = page(world)
+    assert 'name="casual" value="1" checked' in body, "the switch came back off"
+    assert "switched on by you, not measured" in body
+    assert "u, ur, urs, wat" in body and "deadass, fr, highkey, idc" in body
+    off = world.post("/captions/style", data={"subject": SHOT}, follow_redirects=False)
+    assert off.status_code == 303
+    assert "nothing beyond contractions" in page(world, subject=SHOT)
+
+
+def test_rejecting_a_line_once_changes_every_later_line_containing_it(world):
+    """The correction loop is the personalisation feature: she says it once in the box under a
+    line, and the app never ships that wording again - and the swap is listed where she can see
+    and delete it."""
+    made = page(world, subject="3 clips of the same latte")
+    assert "3 tries" in made, made[:400]
+    back = world.post("/captions/fix", data={"subject": "3 clips of the same latte",
+                                             "platform": "instagram", "media": "photo",
+                                             "line": "3 tries and the latte still won",
+                                             "said": "3 tries and the latte still won ok"},
+                      follow_redirects=False)
+    assert back.status_code == 303
+    assert "3 tries and the latte still won" in unquote_plus(back.headers["location"])
+    again = page(world, subject="3 clips of the same latte")
+    assert "3 tries and the latte still won ok" in again, again[:600]
+    assert "1 stored" in again, "the swap is not on the list she can delete"
+
+
+def test_a_correction_needs_both_halves_and_a_change(world):
+    """A half-typed swap would rewrite her captions with a blank, and a swap of a line for itself
+    stores a rule that does nothing, so both are refused and nothing is written."""
+    for data in ({"line": "the tank stays", "said": ""},
+                 {"line": "", "said": "the tank stays"},
+                 {"line": "the tank stays", "said": "the tank stays"}):
+        payload = {"subject": SHOT, "platform": "instagram", "media": "photo"}
+        payload.update(data)
+        back = world.post("/captions/fix", data=payload, follow_redirects=False)
+        assert back.status_code == 303
+        assert "nothing was stored" in unquote_plus(back.headers["location"]), data
+    assert "0 stored" in page(world)
+
+
+def test_deleting_a_correction_puts_the_old_wording_back(world):
+    """Deleting has to undo it for real, or the app keeps arguing with her about a line she
+    changed on purpose - and a bad id must not take her other corrections with it."""
+    world.post("/captions/fix", data={"subject": SHOT, "platform": "instagram", "media": "photo",
+                                      "line": "the tank", "said": "it"})
+    body = world.get("/captions", params={"subject": SHOT}).text
+    ident = re.search(r'name="fix_id" value="(\d+)"', body)
+    assert ident, "the stored correction has no delete form"
+    gone = world.post("/captions/unfix", data={"fix_id": ident.group(1), "subject": SHOT,
+                                               "platform": "instagram", "media": "photo"},
+                      follow_redirects=False)
+    assert gone.status_code == 303
+    assert "0 stored" in page(world)
+    assert "the tank" in page(world)
+    junk = world.post("/captions/unfix", data={"fix_id": "not-a-number", "subject": SHOT},
+                      follow_redirects=False)
+    assert junk.status_code == 303
+    assert "nothing was deleted" in unquote_plus(junk.headers["location"])

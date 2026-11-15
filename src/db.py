@@ -6,9 +6,11 @@ mark_done, save_score beside the rubric weights, log_edit and edit_ops for the c
 that answers "was this generated", start_run and add_step and redid_step for the agent,
 remember and recall and forget for the notes, and the feature and upgrade rows, which
 are replaced whole on every re-read. Most of it is deliberately one row - interview,
-voice, engage, graph, rubric, spend, grants, accounts, terms and staged all carry CHECK (id = 1)
+voice, engage, graph, rubric, spend, grants, accounts, terms, caption and staged all carry CHECK (id = 1)
 and are deleted before they are inserted, because those are settings she set rather than
-a history to page through; bench appends instead, since a benchmark is a list.
+a history to page through; bench and collab append instead, since a benchmark and a list of
+people to pitch are both things she adds to. The collab row keeps its own id through a stage
+change because the stage is the one field she is allowed to move and the name is not.
 
 _rebuild_derived drops and recreates feature and upgrade rather than migrating them:
 those two are a reading of the source tree, so guessing at a migration would be worse
@@ -83,7 +85,17 @@ CREATE TABLE IF NOT EXISTS staged (
 CREATE TABLE IF NOT EXISTS bench (
     id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL, made_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS collab (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL, made_at TEXT NOT NULL,
+    moved_at TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS terms (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS caption (
+    id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS language (
     id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS feature (
@@ -431,6 +443,39 @@ class DB:
         self.conn.execute("DELETE FROM bench")
         self.conn.commit()
 
+    def add_collab(self, row: dict, made_at: str) -> int:
+        """One person she wants to work with. Appends like a benchmark does: the names come from
+        her, and nothing in this file is able to find one."""
+        cur = self.conn.execute("INSERT INTO collab (payload, made_at) VALUES (?, ?)",
+                                (json.dumps(row), made_at))
+        self.conn.commit()
+        return int(cur.lastrowid)
+
+    def get_collab(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT id, payload, made_at, moved_at FROM collab ORDER BY id").fetchall()
+        return [{**json.loads(payload), "id": rid, "made_at": made_at, "moved_at": moved}
+                for rid, payload, made_at, moved in rows]
+
+    def move_collab(self, collab_id: int, status: str, moved_at: str) -> bool:
+        """The stage is the only field rewritten here, and only because she said it moved - this
+        app cannot see a reply. False means the row is gone, so a stale link reports instead of
+        inserting a candidate she never typed."""
+        row = self.conn.execute("SELECT payload FROM collab WHERE id = ?",
+                                 (int(collab_id),)).fetchone()
+        if row is None:
+            return False
+        payload = json.loads(row[0])
+        payload["status"] = status
+        self.conn.execute("UPDATE collab SET payload = ?, moved_at = ? WHERE id = ?",
+                          (json.dumps(payload), moved_at, int(collab_id)))
+        self.conn.commit()
+        return True
+
+    def forget_collab(self, collab_id: int) -> None:
+        self.conn.execute("DELETE FROM collab WHERE id = ?", (int(collab_id),))
+        self.conn.commit()
+
     TERMS_DEFAULT = {"hourly": 0, "minutes": 0}
 
     def get_terms(self) -> dict:
@@ -444,6 +489,42 @@ class DB:
         self.conn.execute("DELETE FROM terms")
         self.conn.execute("INSERT INTO terms VALUES (1, ?)",
                           (json.dumps({**self.TERMS_DEFAULT, **data}),))
+        self.conn.commit()
+
+    CAPTION_DEFAULT = {"casual": False, "markers": False}
+
+    def get_caption(self) -> dict:
+        """Her two switches over the app's own typing, held the same way everything else here is
+        held: absent means off, because an abbreviation the app guessed is a spelling she would
+        have to own in front of whoever reads it."""
+        row = self.conn.execute("SELECT payload FROM caption WHERE id = 1").fetchone()
+        return {**self.CAPTION_DEFAULT, **json.loads(row[0])} if row else dict(self.CAPTION_DEFAULT)
+
+    def save_caption(self, data: dict) -> None:
+        self.conn.execute("DELETE FROM caption")
+        self.conn.execute("INSERT INTO caption VALUES (1, ?)",
+                          (json.dumps({**self.CAPTION_DEFAULT, **data}),))
+        self.conn.commit()
+
+    LANGUAGE_DEFAULT = {"targets": [], "keep": ""}
+
+    def get_language(self) -> dict:
+        """Which languages she posts in, and the words she does not want translated.
+
+        Both start empty on purpose. A default of Spanish would be this app deciding her audience,
+        and a keep-list of words she never named would put brand names she does not own in front of
+        a model with an instruction not to translate them."""
+        row = self.conn.execute("SELECT payload FROM language WHERE id = 1").fetchone()
+        if not row:
+            return dict(self.LANGUAGE_DEFAULT)
+        data = {**self.LANGUAGE_DEFAULT, **json.loads(row[0])}
+        data["targets"] = [str(c) for c in (data.get("targets") or [])]
+        return data
+
+    def save_language(self, data: dict) -> None:
+        self.conn.execute("DELETE FROM language")
+        self.conn.execute("INSERT INTO language VALUES (1, ?)",
+                          (json.dumps({**self.LANGUAGE_DEFAULT, **data}),))
         self.conn.commit()
 
     def save_registry(self, features, upgrades, found_at) -> None:

@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Collaborations &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Collaborations</h1>
+<p class="sub">Who you want to work with, what you actually have to offer them, and the pitch
+written out of your own reason plus your own numbers. Nothing here sends it, follows anybody, or
+opens a stranger&rsquo;s profile: the message goes out when you put it in their inbox.</p>
+<p class="k">Two rules hold this page together. The only numbers it can quote are from the posts
+you imported on the <a href="/numbers">Numbers</a> page &mdash; another account&rsquo;s reach is
+not reachable from a machine with no login and no server, so it is never guessed at. And the
+reason for each pitch has to be yours: a reason this app invented is a sentence you would have
+to send and then explain, so an entry with no reason in it gets a refusal, not a plausible line.</p>
+
+{% if note %}<p class="need">{{ note }}</p>{% endif %}
+{% if empty %}<p class="need">{{ empty }}</p>{% endif %}
+
+<h2>What you have to offer</h2>
+<div class="card">
+  {% if offers %}
+  <table class="tbl">
+    <tr><th>platform</th><th>posts<br>on file</th><th>median<br>views</th>
+      <th>watched<br>through</th><th>new follows<br>per 1,000</th><th>the sentence a pitch can carry</th></tr>
+    {% for o in offers %}
+    <tr>
+      <td>{{ o.platform }}</td>
+      <td>{{ o.posts }}</td>
+      <td>{{ '{:,}'.format(o.median_views) }}</td>
+      <td>{{ o.watch_pct }}%</td>
+      <td>{{ o.follows_per_1000 }}</td>
+      <td class="k">{{ o.line() }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="k tiny">On a phone this table slides sideways &mdash; nothing is left off it.</p>
+  <p class="k">{{ offers | length }} platform{{ '' if offers | length == 1 else 's' }} out of
+    {{ n_rows }} imported post{{ '' if n_rows == 1 else 's' }}. A platform with one post behind it
+    is marked in its own sentence: that is an afternoon that went well, not a rate, and a pitch
+    that leans on it as a rate is the one that gets laughed at.</p>
+  {% else %}
+  <p class="big">There is no number of yours to quote yet.</p>
+  <p class="k">Not one imported post has a view count on it, so every pitch below leads with the
+    work instead. That is not a handicap &mdash; a stranger does not know your median views
+    either, and a small creator is pitched to with a specific idea far more often than with a
+    screenshot. Import posts on the <a href="/numbers">Numbers</a> page and the option to quote a
+    number appears here.</p>
+  {% endif %}
+</div>
+
+<h2>Add somebody</h2>
+<div class="card">
+  <form method="post" action="/collab/add">
+    <div class="grid">
+      <div>
+        <label for="name">Who &mdash; their handle or name</label>
+        <input id="name" type="text" name="name" maxlength="60"
+          placeholder="the handle, exactly as it reads on screen">
+      </div>
+      <div>
+        <label for="platform">Which of your platforms this is about</label>
+        <select id="platform" name="platform">
+          <option value="">not stated &mdash; use my biggest platform</option>
+          {% for p in places %}<option value="{{ p.id }}">{{ p.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label for="why">The specific thing about their account that made you want this</label>
+        <textarea id="why" name="why" rows="3" maxlength="400"
+          placeholder="she answered a comment from a small account with a 90-second tutorial, which almost nobody does"></textarea>
+      </div>
+      <div>
+        <label for="ask">What you would actually make with them</label>
+        <textarea id="ask" name="ask" rows="2" maxlength="300"
+          placeholder="a swap: I film the try-on in their jacket, they film mine in it, one cut each"></textarea>
+      </div>
+      <div>
+        <label for="format">Shape of the work</label>
+        <input id="format" type="text" name="format" maxlength="80"
+          placeholder="one 30-second reel each, or a two-part split">
+      </div>
+    </div>
+    <p class="row" style="margin-top:14px">
+      <button type="submit">Put them on the list</button>
+      <span class="k">Only the name is required. Leave the reason out and the entry still saves
+        &mdash; the pitch underneath it then refuses to write itself, which is the honest answer
+        and takes one sentence to fix.</span>
+    </p>
+  </form>
+</div>
+
+<h2>The list</h2>
+{% if candidates %}
+{% for c in candidates %}
+<div class="card">
+  <div class="row">
+    <span class="big">{{ c.name }}</span>
+    <span class="chip {{ 'post' if c.status == 'made something' else ('fix' if c.status == 'no answer' else 'strong') }}">{{ c.status }}</span>
+    {% if c.platform %}<span class="chip">{{ c.platform }}</span>{% endif %}
+  </div>
+  {% if c.why %}<p class="claim">{{ c.why }}</p>{% else %}
+  <p class="limit">No reason typed yet, so no pitch is written. Say the specific thing you noticed
+    about their account and the message builds itself from that.</p>{% endif %}
+  {% if c.ask %}<p class="k"><strong>What you want to make:</strong> {{ c.ask }}
+    {% if c.format %} &mdash; {{ c.format }}{% endif %}</p>{% endif %}
+  <p class="k tiny">Added {{ c.made_at }}{% if c.moved_at %}, last moved {{ c.moved_at }}{% endif %}.</p>
+
+  {% if c.brief.lines %}
+  <div>
+    <label for="pitch-{{ c.id }}">The pitch, ready to copy</label>
+    <textarea id="pitch-{{ c.id }}" rows="{{ c.brief.lines | length + 2 }}">{{ c.brief.text }}</textarea>
+    <p class="row">
+      <button type="button" class="ghost tiny-btn copy-pitch" data-for="pitch-{{ c.id }}">
+        Copy this pitch</button>
+      <span class="k copy-note"></span>
+    </p>
+    <p class="k tiny">Four moves: the specific thing you noticed, the one ask, one line of your
+      own numbers, and a yes small enough to say to. Paste it into their DM or their email
+      yourself &mdash; this app has no login on any platform and would not use one if it did.</p>
+  </div>
+  {% endif %}
+  {% if c.brief.held %}
+  <p class="limit"><strong>Held back:</strong> {{ c.brief.held | join(' ') }}</p>
+  {% endif %}
+
+  <form method="post" action="/collab/move" class="row" style="margin-top:12px">
+    <input type="hidden" name="id" value="{{ c.id }}">
+    <span class="k tiny">Where it got to &mdash; you are the only thing that can see this:</span>
+    {% for s in stages %}
+    <button type="submit" name="status" value="{{ s }}"
+      class="ghost tiny-btn {{ 'on' if c.status == s }}">{{ s }}</button>
+    {% endfor %}
+  </form>
+  <form method="post" action="/collab/forget" class="row">
+    <input type="hidden" name="id" value="{{ c.id }}">
+    <button type="submit" class="ghost tiny-btn">Take off the list</button>
+    <span class="k tiny">Nothing was sent, so nothing has to be unsent.</span>
+  </form>
+</div>
+{% endfor %}
+{% else %}
+<div class="card">
+  <p class="claim">Nobody is on the list.</p>
+  <p class="k">This is the part of growing that no scheduler does for you: somebody whose work you
+    would genuinely rather be next to than compete with, and one specific thing you noticed about
+    them. Type that in above and the message writes itself from your own numbers.</p>
+</div>
+{% endif %}
+
+<h2>Where your asks got to</h2>
+<div class="card">
+  <div class="row">
+    {% for s in stages %}
+    <span class="chip {{ 'post' if funnel.counts[s] else '' }}">{{ s }}: {{ funnel.counts[s] }}</span>
+    {% endfor %}
+  </div>
+  <p class="claim">{{ funnel.meaning }}</p>
+  <p class="k">{{ funnel.list_n }} name{{ '' if funnel.list_n == 1 else 's' }} on the list,
+    {{ funnel.asked }} marked as sent, {{ funnel.answered }} came back{% if funnel.rate is not none
+    and funnel.asked >= funnel.min_asks %} ({{ funnel.rate }}%){% endif %}.
+    This app cannot see an answer arrive, so every one of those numbers is something you typed
+    &mdash; which is also why it cannot be wrong about what happened, only about what you have got
+    round to recording. {{ funnel.waiting }} still marked &ldquo;to pitch&rdquo;.</p>
+  <p class="limit"><strong>Why a reply rate under {{ funnel.min_asks }} asks is refused as a
+    rate:</strong> at two or three asks, one friendly person or one bad week moves the number by
+    tens of percentage points on its own. Below {{ funnel.min_asks }} the honest reading is the
+    list of names, not the fraction &mdash; which is why the percentage is only printed once there
+    are enough asks behind it.</p>
+</div>
+
+<h2>What this page cannot know</h2>
+<div class="card">
+  <ul class="k">
+    {% for c in cannot %}<li>{{ c }}</li>{% endfor %}
+  </ul>
+  <p class="k tiny">These four are the limits of the whole room rather than of one card, so they
+    are listed once here and carried with every pitch the agent writes you.</p>
+</div>
+<script>
+  function collab_copy(text, note, fail) {
+    const box = document.createElement("textarea");
+    box.value = text;
+    box.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(box);
+    box.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    box.remove();
+    if (ok) { note.textContent = "On your clipboard."; } else { fail(note); }
+  }
+  document.querySelectorAll(".copy-pitch").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const box = document.getElementById(btn.getAttribute("data-for"));
+      const note = btn.parentElement.querySelector(".copy-note");
+      const stuck = (n) => {
+        n.textContent = "The browser would not copy it - the pitch is selected, press Ctrl+C.";
+        box.focus();
+        box.select();
+      };
+      const text = box.value.trim();
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          note.textContent = "On your clipboard.";
+        }, () => collab_copy(text, note, stuck));
+      } else {
+        /* The phone reaches this app over wifi, not https, so the clipboard API is missing
+           there and this is the path it takes. */
+        collab_copy(text, note, stuck);
+      }
+    });
+  });
+</script>
+{% endblock %}

@@ -3,10 +3,15 @@
 Two planners, one contract. With a key the model chooses tools from the catalogue;
 without one the rulebook does, and the run says which one wrote the plan, because
 "the AI decided" is not true on a machine with no key in it.
+
+Neither planner used to carry her words past the choice of tools: each step was handed `{}`,
+so a sentence that named Spanish, TikTok, five tags or tomorrow reached the tool that wanted them
+as a default. `params.fill` is where the sentence now meets the arguments a tool declares - the
+model's own args survive too, since the prompt asks for them.
 """
 from datetime import datetime
 
-from src.agent import modes, roster, tools
+from src.agent import modes, params, roster, tools
 from src.agent.roster import chain
 from src.agent.tools import REGISTRY, Outcome
 
@@ -16,7 +21,8 @@ PLAN_SCHEMA = {
     "properties": {
         "steps": {"type": "array", "items": {
             "type": "object", "required": ["tool"],
-            "properties": {"tool": {"type": "string"}}}},
+            "properties": {"tool": {"type": "string"},
+                           "args": {"type": "object"}}}},
         "because": {"type": "string"},
     },
 }
@@ -26,6 +32,8 @@ the request, in the order they must run, using only these ids:
 {catalogue}
 
 Rules: a tool whose needs are unmet has been left out of that list, so do not invent one.
+Put a key in "args" only when she said the value - the catalogue names what each tool takes, and a
+value she left out is the tool's own default to find, not yours to guess.
 Reply as JSON: {{"steps": [{{"tool": "id", "args": {{}}}}], "because": "one sentence"}}.
 Fewer tools, correctly run, beats a long list that will be skipped."""
 
@@ -88,13 +96,16 @@ def model_plan(kit, asked: str, mode, desk=None) -> tuple[list[tuple[str, dict]]
         open_ids = [i for i in open_ids if i in bench]
         if not open_ids:
             return rule_plan(kit, asked, desk)
-    catalogue = "\n".join(f"- {REGISTRY[i].id}: {REGISTRY[i].describe}" for i in open_ids)
+    catalogue = "\n".join(f"- {REGISTRY[i].id} (takes: "
+                          f"{', '.join(REGISTRY[i].args) or 'nothing'}): {REGISTRY[i].describe}"
+                          for i in open_ids)
     data = kit.engine.complete_json(PROMPT.format(catalogue=catalogue), asked, PLAN_SCHEMA)
-    wanted = [s.get("tool", "") for s in data.get("steps", []) if isinstance(s, dict)]
+    wanted = [(s.get("tool", ""), s.get("args") if isinstance(s.get("args"), dict) else {})
+              for s in data.get("steps", []) if isinstance(s, dict)]
     steps, dropped = [], []
-    for name in wanted:
+    for name, given in wanted:
         if name in open_ids:
-            steps.append((name, {}))
+            steps.append((name, given))
         else:
             dropped.append(name)
     if not steps:
@@ -135,12 +146,13 @@ def run(kit, asked: str, mode_id: str, desk_id: str = "") -> dict:
     if desk is not None and desk_id:
         planner = f"{desk.name} (you named the desk)"
     run_id = kit.db.start_run(asked.strip() or "run the growth loop", mode.id, planner, _now())
-    for tool_id, args in steps:
+    for tool_id, given in steps:
         tool = REGISTRY.get(tool_id)
         if tool is None:
-            kit.db.add_step(run_id, tool_id, args, "failed",
+            kit.db.add_step(run_id, tool_id, given, "failed",
                             f"{tool_id} is not a tool this app has.", {}, _now())
             continue
+        args = params.fill(tool, given, asked)
         if not mode.allows(tool.cap):
             kit.db.add_step(run_id, tool_id, args, "skipped",
                             f"{mode.label} does not reach for {modes.CAP_LABEL[tool.cap]}.",

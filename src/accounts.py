@@ -12,7 +12,9 @@ The three routes, and why each one is what it is:
 * **token** - an official API access token you mint from a developer app you registered.
   No password, no cookie, no scraping, and the platform itself decides which fields you get.
   It reads stats for real; posting through it usually also wants the media at an address
-  *it* can fetch, which a laptop on your wifi is not.
+  *it* can fetch, which a laptop on your wifi is not. **This build has no field to paste one
+  into and no client that would use it**, so picking the token route records your intent and
+  reads nothing - see the METHODS note, which has to say the same thing.
 * **handoff** - the app builds the finished file and the exact caption, opens the platform
   in your browser where you are already signed in, and you tap Share. The app never holds
   your session, so it can never be the reason you lose the account.
@@ -173,9 +175,10 @@ METHODS = [
      "You download the platform's data archive or insights CSV and drop it on the Numbers "
      "page. Real numbers, per-post, including retention. Costs nothing and touches no login."),
     ("token", "A token you mint yourself",
-     "You register a developer app and paste the access token it gives you. The platform "
-     "decides which fields that token can read, and no password is involved. Setting one up "
-     "is a page of clicking per platform and some need a Business account."),
+     "A minted token reads stats for real on every one of these platforms, and no password is "
+     "involved - but this build has no field to paste one into and no client that would use it, "
+     "so choosing this records your intent and reads nothing. Export is the route that works "
+     "today."),
     ("handoff", "Nothing - you are the connection",
      "The app builds the finished file and the exact caption, opens the platform in your "
      "browser where you are already signed in, and you tap Share. This is the only route that "

@@ -491,6 +491,10 @@ h2.say { margin-top: 0; }
 .chip.folklore, .chip.skip { color: var(--vermillion); border-color: #4d2a1f; }
 .chip.unreadable { color: var(--faint); }
 .chip.on { color: var(--on-bone); background: var(--bone); border-color: var(--bone); }
+/* A chip that holds a string of hers, quoted to be kept letter-for-letter, cannot be re-cased:
+   #THRIFTFLIP is not the tag she typed, and a page that checks her casing has to show it back as
+   she wrote it. Labels keep the uppercase; tokens do not. */
+.chip.verbatim { text-transform: none; letter-spacing: .03em; color: var(--slate); }
 a.chip { text-decoration: none; }
 a.chip:hover { color: var(--text); border-color: var(--bone-dim); }
 .chipset { flex-wrap: wrap; gap: 6px; align-items: center; }
