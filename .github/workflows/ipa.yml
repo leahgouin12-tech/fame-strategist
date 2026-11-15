@@ -76,18 +76,26 @@ jobs:
             build > xcodebuild.log 2>&1
           status=$?
           echo "xcodebuild exited $status"
-          errs=$(grep -nE "error:|fatal|not currently configured|Multiple commands|The following build commands failed" xcodebuild.log | head -14)
-          [ -n "$errs" ] || errs=$(tail -14 xcodebuild.log)
-          while IFS= read -r line; do
-            esc=$(printf '%s' "${line:0:220}" | sed -e 's/%/%25/g' -e 's/#/%23/g' -e 's/"/%22/g' | tr -d '\r')
-            echo "::error::$esc"
-          done <<< "$errs"
-          {
-            echo '### xcodebuild failed (exit '"$status"')'
-            echo '```'
-            echo "$errs"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          say() { printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/#/%23/g' -e 's/"/%22/g' | tr -d '\r' | cut -c1-220; }
+          if [ "$status" -ne 0 ]; then
+            errs=$(grep -nE "error:|fatal|not currently configured|Multiple commands|The following build commands failed" xcodebuild.log | head -14)
+            [ -n "$errs" ] || errs=$(tail -14 xcodebuild.log)
+            while IFS= read -r line; do echo "::error::$(say "$line")"; done <<< "$errs"
+            {
+              echo '### xcodebuild failed (exit '"$status"')'
+              echo '```'
+              echo "$errs"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            # The reporting has to be gated on the exit code. The first version of this block printed
+            # the tail of the log either way, so a green build (#6, the one that finally compiled)
+            # published eight ::error:: annotations and looked red to anyone reading the summary -
+            # a fake failure is as much a lie as a fake success. Warnings now come back as warnings.
+            echo "::notice::compiled, unsigned ($(wc -l < xcodebuild.log) lines of build log)"
+            grep -E "warning:" xcodebuild.log | sort -u | head -8 \
+              | while IFS= read -r line; do echo "::warning::$(say "$line")"; done
+          fi
           exit "$status"
 
       - name: Pack Payload/ into an .ipa

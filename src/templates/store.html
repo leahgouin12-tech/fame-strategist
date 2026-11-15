@@ -48,7 +48,8 @@ an empty list below means no build has been dropped in yet, not a broken button.
         <code>ios\</code> on a free macOS runner with XcodeGen and Apple&rsquo;s
         <code>xcodebuild</code>, then zips the built app into <code>FameStrategist.ipa</code> and
         uploads it as a download. Signing is deliberately turned off in that file because the
-        certificate is yours, not the runner&rsquo;s.</li>
+        certificate is yours, not the runner&rsquo;s. <strong>Done:</strong> run #6 finished green on
+        2026-11-15 and the artifact is <code>fame-strategist-ipa</code>.</li>
       <li><strong>Put the file where this page can see it.</strong> Unzip the artifact into
         <code>data\packages</code>. This page picks it up on the next reload and the listing file
         below stops being empty &mdash; it is generated from that file&rsquo;s bytes, so the size and
@@ -81,9 +82,19 @@ an empty list below means no build has been dropped in yet, not a broken button.
       a marketplace. AltStore Classic&rsquo;s path is your own Apple ID signing your own build;
       the pages read here state no region limit for it.</p>
     <h3>What has not happened yet</h3>
-    <p class="claim">No <code>.ipa</code> exists, and none has ever been compiled: the Swift in
-      <code>ios\</code> has not been through a compiler once, so the first green CI run is also
-      the first real test of it. That action cannot run until this repository has a remote.</p>
+    <p class="claim">The <code>.ipa</code> is on GitHub, not on this machine. Run
+      <strong>#6</strong> of the <code>ipa</code> action compiled <code>ios\</code> for the first
+      time, on Xcode 26.6, and uploaded the result as the artifact
+      <code>fame-strategist-ipa</code>. The three runs before it were red, and each one named a
+      defect that only a compiler could name: an error constant Apple&#39;s enum does not contain, a
+      delegate method labelled <code>with:</code> instead of WebKit&#39;s
+      <code>withError:</code> &mdash; which compiled and simply never became the delegate, so the
+      &ldquo;the laptop did not answer&rdquo; screen would not have appeared &mdash; and an
+      <code>Info.plist</code> with no <code>CFBundleExecutable</code>, meaning an app that installs
+      and does not know which file to run. A GitHub artifact can only be downloaded by a signed-in
+      browser, so that download is yours: the file has to land in <code>data\packages</code> before
+      this page can offer it. Nothing has been installed on a phone, and the plain
+      <code>http</code> question above is still open.</p>
   </div>
 
   <div class="card">

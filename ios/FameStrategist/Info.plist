@@ -23,6 +23,18 @@
   <key>UILaunchScreen</key>
   <dict/>
 
+  <!-- The validator's own complaint on the first green build: "All interface orientations must be
+       supported unless the app requires full screen." Declaring the whole set rather than opting out
+       of multitasking, because the page inside this wrapper reflows and a phone turned sideways is
+       not a special case. -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+
   <!-- The address a phone types is plain http on a private network, which App Transport
        Security blocks by default. The exception is scoped to web content only: this app has no
        URLSession calls of its own, so there is nothing else for it to carry in the clear. -->
