@@ -124,6 +124,13 @@
   <p class="banner warn">{{ pending_count }} of {{ entry_count }} playbook claims still have an
     unverified source. <a href="/sources">See which</a>.</p>
   {% endif %}
+  {# The worker answers from the phone's own copy when the laptop cannot be reached. That has to be
+     said out loud: a screen of last Tuesday's numbers looks exactly like today's otherwise. #}
+  <p class="banner warn" id="copystate" hidden>
+    <strong>Offline copy.</strong> This screen came off your phone &mdash; stored
+    <span id="copysince">earlier</span>. Nothing refreshed since it left the wifi, and anything that
+    has to be worked out waits until the laptop is reachable again.
+  </p>
 
   <main>
     {% block body %}{% endblock %}
@@ -147,8 +154,26 @@
     const chip = document.getElementById("install");
     if (matchMedia("(display-mode: standalone)").matches && chip) chip.remove();
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      // The script sits under /static, but a worker's scope comes from the script's own URL unless
+      // it is asked for: without this it could only ever intercept /static files, and every page she
+      // packed would still fail to open offline.
       addEventListener("load", () => navigator.serviceWorker
-        .register("/static/sw.js").catch(() => {}));
+        .register("/static/sw.js", { scope: "/" }).catch(() => {}));
+    }
+    // Ask the worker whether the screen she is looking at came out of storage, and stamp the
+    // banner with the moment that copy was made. The worker holds one answer per client, so asking
+    // once per load survives the page having been served before this script could run.
+    // The worker stamps this meta tag into a page it had to take out of storage. Reading the
+    // document is the one mechanism that works on every browser: asking the worker which copy a
+    // page came from needs a client id it does not always have.
+    const stored = document.querySelector('meta[name="fame:stored"]');
+    const banner = document.getElementById("copystate");
+    if (stored && banner) {
+      const ms = Number(stored.content || 0);
+      document.getElementById("copysince").textContent = ms
+        ? new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+        : "earlier";
+      banner.hidden = false;
     }
     let offer = null;
     addEventListener("beforeinstallprompt", (event) => {

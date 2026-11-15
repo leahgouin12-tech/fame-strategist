@@ -183,6 +183,8 @@ def _body_facts(fn, aliases: dict, by_name=None, seen=None) -> tuple:
                     templates.append(str(node.args[1].value))
                 elif f.id == "RedirectResponse":
                     redirects.append("redirect")
+                elif f.id == "JSONResponse":
+                    served.append("answers JSON")
                 elif f.id in ("Response", "StreamingResponse", "FileResponse"):
                     served.append(served_as(node))
                 elif not f.id.startswith("_"):

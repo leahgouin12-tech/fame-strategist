@@ -27,7 +27,7 @@ import time
 from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
@@ -35,6 +35,7 @@ from PIL import Image
 from src import net
 from src import accounts
 from src import language
+from src import offline
 from src.agent import modes as agent_modes
 from src.agent import orchestrator, tools as agent_tools
 from src.agent import roster as agent_roster
@@ -172,7 +173,12 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         if (not from_phone(request) or path.startswith("/static")
                 or path in ("/phone/unlock", "/favicon.ico", "/store/apps.json")
                 or path.startswith("/store/dl/")):
-            return await call_next(request)
+            got = await call_next(request)
+            if path == "/static/sw.js":
+                # The worker file sits under /static but has to control every page, and a browser
+                # only lets a script widen its scope when the response itself says so.
+                got.headers["Service-Worker-Allowed"] = "/"
+            return got
         if gate.accepts(request.cookies.get(net.COOKIE, "")):
             return await call_next(request)
         blocked = templates.TemplateResponse(
@@ -2087,11 +2093,23 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         return story_view(request, note="Cleared the staged post. The rendered files stay in "
                                         "outputs/story - they are on your disk, not in this app.")
 
+    # ---- carried with her (offline) -------------------------------------------------------
+    # The worker in src/static/sw.js can only carry what it is told about, and the honest way to
+    # tell it is to read this app's own routes back out of the code (src/offline.py). A typed list
+    # would rot the day somebody adds a room, and "everything offline" would quietly become
+    # "most of it". The manifest names her files, so it sits behind the PIN like every other page.
+
+    @app.get("/offline/manifest")
+    def offline_manifest(request: Request):
+        """Every page and every file the app can show, sized, for the phone to store."""
+        return JSONResponse(offline.manifest(state_dir))
+
     @app.get("/phone", response_class=HTMLResponse)
     def phone_page(request: Request, note: str = ""):
         port = request.url.port or (443 if request.url.scheme == "https" else 80)
         return page(request, "phone.html", addresses=net.lan_addresses(), port=port,
                     status=gate.status(), note=note, local=not from_phone(request),
+                    offline=offline.manifest(state_dir),
                     pin_range=(net.MIN_PIN, net.MAX_PIN), cooldown=net.COOLDOWN_MINUTES)
 
     @app.post("/phone/pin", response_class=HTMLResponse)

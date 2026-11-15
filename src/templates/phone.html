@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Phone &middot; Fame Strategist{% endblock %}
 {% block body %}
+{# Both helpers exist so the sentence about the copy reads like a person wrote it, and so the
+   threshold matches the one the worker uses when it reports what it actually stored. #}
+{% macro one(n, word) -%}{{ n }} {{ word }}{{ "s" if n != 1 else "" }}{%- endmacro %}
+{% macro size(n) -%}
+{%- if n >= 1024 * 1024 -%}{{ (n / 1024 / 1024) | round(1) }} MB{%- else -%}{{ (n / 1024) | round(0) | int }} KB{%- endif -%}
+{%- endmacro %}
 <h1>Phone</h1>
 <p class="sub">The engine stays on this laptop &mdash; it is the only thing here with enough memory
 to move a jaw or cut a clip. The phone becomes a window onto it: its own icon, its own
@@ -18,6 +24,12 @@ anyone's server.</p>
     {% endfor %}
     <p class="k">More than one line means more than one network card. Start with the first;
       if the phone spins, try the next.</p>
+    <p class="need">Type the <code>http://</code> part too, in the <strong>address bar</strong>
+      &mdash; not the search box. Safari quietly upgrades a bare address to
+      <code>https://</code>, and this app has no certificate, so an
+      <code>https://</code> attempt dies before it reaches a single page. A spinning phone or
+      &ldquo;Can't Connect to the Server&rdquo; almost always means the address starts with
+      <code>https:</code> &mdash; delete the <code>s</code>.</p>
     {% else %}
     <p class="claim">This laptop is not joined to a network right now, so there is no address
       to hand a phone. Join your wifi or your phone's hotspot first.</p>
@@ -33,6 +45,47 @@ anyone's server.</p>
       <li>Open it from the home screen. No address bar, no tabs, its own icon.</li>
     </ol>
     <p class="k">The PIN is remembered, so this is a one-time set of taps.</p>
+  </div>
+
+  <div class="card">
+    <h2>Carry it with you</h2>
+    <p class="k">This is the part that works with no wifi at all. The phone keeps its own copy of
+      <strong>{{ one(offline.counts.pages, "page") }} and {{ one(offline.counts.files, "file") }}</strong>
+      &mdash; about {{ size(offline.bytes) }} of that is pictures and clips, and the pages bring
+      their own text along. Pack it while the laptop is reachable, and the icon opens anywhere
+      after that.</p>
+    {% if local %}
+    <p class="need">Do the packing <strong>from the phone</strong>, in the app you installed. The copy
+      that matters lives on that device, and this laptop already has the originals.</p>
+    {% endif %}
+    <p class="row">
+      <span class="chip" id="packstate">checking this phone&hellip;</span>
+      <span class="chip" id="packbytes">&mdash;</span>
+      <span class="chip" id="packwhen">never stored</span>
+    </p>
+    <p class="row">
+      <button type="button" class="btn" id="pack">Copy everything to this phone</button>
+      <button type="button" class="ghost" id="packerase">Erase the copy on this phone</button>
+    </p>
+    <p class="k" id="packprogress" hidden></p>
+    <ul class="assume" id="packdetail" hidden></ul>
+    {% if offline.counts.too_big %}
+    <p class="limit">{{ offline.counts.too_big }} file{{ "s" if offline.counts.too_big != 1 else "" }}
+      stayed behind because no phone should carry it:
+      {% for t in offline.too_big %}{{ t.url }} ({{ (t.bytes / 1024 / 1024) | round(1) }} MB){% if
+      not loop.last %}, {% endif %}{% endfor %}.</p>
+    {% endif %}
+    <h4>What still needs the laptop</h4>
+    <ul class="assume">
+      <li>a new edit, a rendered preview, a clip cut &mdash; that is computed here, not stored, so the
+        stored version is the one you last looked at;</li>
+      <li>fresh numbers, trends, and anything the agent has to think about;</li>
+      <li>the very first time you open a page after installing &mdash; pack once and it travels.</li>
+    </ul>
+    <p class="limit">The copy sits on your phone, behind your own screen lock, until you erase it
+      here &mdash; changing the PIN or locking every phone does not reach into it, because by then the
+      phone is not talking to the laptop. iOS also throws it out if the app goes about a week
+      unopened.</p>
   </div>
 
   <div class="card">
@@ -83,10 +136,104 @@ anyone's server.</p>
 </div>
 
 <div class="need">
-  <strong>What this is not.</strong> It is not an app you can use on a plane, and not one that
-  works with the laptop closed: the picture work happens here, so this is a remote control with
-  an icon. The PIN is a door on your own network, not a login system &mdash; five wrong guesses
-  bring {{ cooldown }} minutes of waiting, and only you can change the PIN, from this page, on
-  this laptop. Nothing is sent anywhere except from the phone to this machine.
+  <strong>What this is not.</strong> Packed, it is your whole plan on a plane &mdash; every page and
+  picture the app can show, read on the phone with no network. It is not a laptop in your pocket:
+  a new edit, a clip cut, a fresh number or an agent answer is computed here, so those wait until
+  the phone can reach this machine. The PIN is a door on your own network, not a login system &mdash;
+  five wrong guesses bring {{ cooldown }} minutes of waiting, and only you can change the PIN, from
+  this page, on this laptop. Nothing is sent anywhere except from the phone to this machine.
 </div>
+
+<script>
+  (function () {
+    const state = document.getElementById("packstate"),
+          bytes = document.getElementById("packbytes"),
+          when = document.getElementById("packwhen"),
+          bar = document.getElementById("packprogress"),
+          detail = document.getElementById("packdetail"),
+          go = document.getElementById("pack"),
+          wipe = document.getElementById("packerase");
+    if (!go) return;
+    if (!("serviceWorker" in navigator)) {
+      state.textContent = "this browser will not store a copy";
+      go.disabled = true;
+      return;
+    }
+
+    const then = (ms) => new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    const ask = (type) => navigator.serviceWorker.ready
+      .then((reg) => reg.active && reg.active.postMessage({ type }));
+    let misses = [], busy = false;
+
+    function size(n) {
+      return n > 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+    }
+
+    function show(d, note) {
+      const all = d.entries || [];
+      const pages = all.filter((e) => e.kind === "page").length;
+      const files = all.filter((e) => e.kind === "file").length;
+      state.textContent = note || (all.length
+        ? pages + " page" + (pages === 1 ? "" : "s") + " + " + files +
+          " file" + (files === 1 ? "" : "s") + " on this phone"
+        : "nothing stored on this phone yet");
+      bytes.textContent = size(d.bytes || 0);
+      const late = all.reduce((n, e) => Math.max(n, e.stored || 0), 0);
+      when.textContent = late ? "stored " + then(late) : "never stored";
+    }
+
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      const d = event.data || {};
+      if (d.type === "fame:pack:progress") {
+        bar.hidden = false;
+        bar.textContent = "Copying - " + d.done + " of " + d.total + ": " + d.path;
+        if (d.state !== "ok") misses.push(d.path + " - " + d.why);
+      }
+      if (d.type === "fame:pack:done") {
+        busy = false;
+        go.disabled = false;
+        const s = d.summary || {};
+        if (s.error) { bar.hidden = false; bar.textContent = s.error; return; }
+        bar.textContent = "Done. Everything the app can show is on this phone now.";
+        detail.textContent = "";
+        misses.forEach((m) => {
+          const li = document.createElement("li");
+          li.textContent = m;
+          detail.appendChild(li);
+        });
+        detail.hidden = !misses.length;
+        // Read the cache back instead of announcing the copy from the summary: the chips then carry
+        // the counts and the store time that are actually in storage, not what the pack intended.
+        ask("fame:status");
+      }
+      if (d.type === "fame:status" && !busy) { show(d); }
+      if (d.type === "fame:erased") {
+        go.disabled = false;
+        busy = false;
+        bar.hidden = false;
+        bar.textContent = "Erased from this phone. The laptop still holds every original.";
+        show({ entries: [], bytes: 0 }, "nothing stored on this phone yet");
+      }
+    });
+
+    go.addEventListener("click", () => {
+      misses = [];
+      busy = true;
+      detail.hidden = true;
+      bar.hidden = false;
+      bar.textContent = "Asking the laptop for its list…";
+      state.textContent = "copying…";
+      go.disabled = true;
+      ask("fame:pack").catch(() => { busy = false; go.disabled = false; });
+    });
+
+    wipe.addEventListener("click", () => {
+      if (!confirm("Erase the offline copy on this phone? Nothing on the laptop changes.")) return;
+      busy = true;
+      ask("fame:erase").catch(() => { busy = false; });
+    });
+
+    ask("fame:status").catch(() => { state.textContent = "no copy on this phone yet"; });
+  })();
+</script>
 {% endblock %}

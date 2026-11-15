@@ -120,3 +120,17 @@ def test_the_footer_is_a_strip_not_a_sheet():
     css = (SRC / "static" / "app.css").read_text(encoding="utf-8")
     foot = re.search(r"\.foot\s*\{([^}]*)\}", css).group(1)
     assert "top: auto" in foot
+
+
+def test_a_string_written_by_a_script_carries_no_html_entities():
+    """`textContent` does not decode entities, so a chip that set "copying&hellip;" printed the
+    ampersand and the word on screen. An entity belongs in markup; a JavaScript string that
+    reaches the DOM as text has to hold the character itself."""
+    offenders = []
+    for page in sorted((SRC / "templates").glob("*.html")):
+        for line in page.read_text(encoding="utf-8").splitlines():
+            writes_text = re.search(r"\.(textContent|innerText)\s*=", line)
+            entity = re.search(r"&[a-zA-Z]+;|&#\d+;", line)
+            if writes_text and entity:
+                offenders.append(f"{page.name}: {entity.group(0)}")
+    assert not offenders, "write the character, not the entity: " + ", ".join(offenders)
