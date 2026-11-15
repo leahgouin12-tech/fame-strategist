@@ -114,9 +114,12 @@ final class ServerViewController: UIViewController, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: any Error) {
         let code = (error as NSError).code
-        let unreachable: [URLError.Code] = [.notConnectedToServer, .timedOut, .cannotFindHost,
-                                            .cannotConnectToHost, .networkConnectionLost]
-        guard unreachable.contains(where: { $0.rawValue == code }) else { return }
+        // Names taken from Apple's own URLError.Code page on 2026-11-15, because the first attempt at
+        // this list guessed one that does not exist. Each of these is a way the laptop specifically
+        // failed to answer; anything else is a page-level error the web view can show on its own.
+        let unanswered: [URLError.Code] = [.cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+                                           .timedOut, .networkConnectionLost, .notConnectedToInternet]
+        guard unanswered.contains(where: { $0.rawValue == code }) else { return }
         let alert = UIAlertController(
             title: "The laptop did not answer",
             message: "This app is a window onto your computer, so it needs the computer awake, on "
