@@ -26,7 +26,14 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macos-14 died under us: GitHub retired every macOS 14 image on 2026-11-02, so a job that asks
+    # for it is cancelled in about two seconds with "The configuration 'macos-14-arm64-us-default'
+    # is not supported" - no build, no log, nothing to debug. Read off GitHub's own runner-images
+    # README on 2026-11-15: the supported arm64 labels are macos-26 and macos-15, and GitHub keeps
+    # only the two newest macOS versions live. Pinned to macos-26 rather than macos-latest so the
+    # day Apple's next OS moves the -latest label, this file fails loudly instead of silently
+    # building on a different Xcode than the one it was written against.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 

@@ -63,6 +63,15 @@ These four were opened and quoted in this session, and the implementation depend
    every example URL is https, and the page never mentions a local address or a plain-http one, so it
    neither allows nor forbids the LAN source this design produces.
 
+7. **The runner label the first draft used is already dead.** GitHub's own
+   [runner-images README](https://raw.githubusercontent.com/actions/runner-images/main/README.md),
+   read 2026-11-15: "All macOS 14 images retired from GitHub Actions on November 2, 2026," and the
+   supported arm64 labels today are `macos-26` (which is also what `macos-latest` points at) and
+   `macos-15` - GitHub keeps only the two newest macOS versions live. A job that asks for a retired
+   image is not a build that fails: it is cancelled in about two seconds with
+   "The configuration 'macos-14-arm64-us-default' is not supported", which is exactly what her first
+   push produced. `ipa.yml` now pins `macos-26` and says why in its own comment.
+
 ## The one open question, and it is load-bearing
 
 AltStore Classic on her iPhone has to fetch `apps.json` and then the `.ipa`, both from
