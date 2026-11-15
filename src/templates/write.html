@@ -23,11 +23,71 @@ call.</strong></p>
   <ul class="assume">
     {% for line in profile.signature() %}<li>{{ line }}</li>{% endfor %}
   </ul>
+  {% if origin %}
+  <p class="k">Read out of your own files, not typed in here: {{ origin }}</p>
+  {% endif %}
   {% if profile.learned %}
-  <p class="k">Measured from {{ profile.samples }} samples just now. Paste more and every number
-    on this card moves.</p>
+  <p class="k">Measured from {{ profile.samples }} sample{{ "" if profile.samples == 1 else "s" }}
+    just now. Paste more, or send another export, and every number on this card moves.</p>
   {% endif %}
 </div>
+
+<div class="card">
+  <h3>Or send the app&rsquo;s data export</h3>
+  <p class="k">Every platform will mail you a file of your own posts, and the captions in it are
+    the most honest samples there are &mdash; they are the lines you actually published. The
+    archive is read on this machine, the writing in it is pulled out line by line, and
+    <strong>nothing from it becomes your voice until you tick it</strong>. Other
+    people&rsquo;s words are skipped: comments, replies and messages are not a sample of how you
+    write.</p>
+  <form method="post" action="/write/harvest" enctype="multipart/form-data">
+    <label>The file the platform sent you &mdash; <code>.zip</code>, <code>.json</code>,
+      <code>.csv</code> or <code>.txt</code></label>
+    <input type="file" name="file" accept=".zip,.json,.csv,.txt">
+    <button type="submit">Read my captions out of it</button>
+    <span class="k">No model call, no upload, no account touched. This reads a file you
+      downloaded yourself.</span>
+  </form>
+</div>
+
+{% if harvest %}
+<div class="card">
+  <div class="row"><h3 style="margin:0">{{ harvest.lines|length }} line{{ "" if harvest.lines|length == 1 else "s" }}
+    found in {{ harvest.name }}</h3>
+    <span class="chip">{{ harvest.kind }}</span></div>
+  <p class="k">{{ harvest.provenance }}</p>
+  <p class="need">Tick the ones that are actually yours. Everything the reader could not rule out
+    comes pre-checked, so untick what you would never have written.</p>
+  <form method="post" action="/write/harvest/keep">
+    <div class="vh-list">
+      {% for line in harvest.lines %}
+      <label class="k vh"><input type="checkbox" name="keep" value="{{ loop.index0 }}"
+        {{ "checked" if line.text not in picked }}>
+        <span class="vh-text">{{ line.text }}</span>
+        <span class="vh-from">{{ line.from }}</span></label>
+      {% endfor %}
+    </div>
+    <p><button type="submit">Learn from the ticked lines</button></p>
+  </form>
+  <form method="post" action="/write/harvest/drop" style="margin-top:-6px">
+    <button type="submit" class="ghost" name="drop">Throw this batch away</button>
+    <span class="k">Removes the list, not your voice profile.</span>
+  </form>
+  {% if harvest.dropped %}
+  <h4>Not kept as samples, and why</h4>
+  <ul class="assume">{% for d in harvest.dropped %}
+    <li>{{ d.text }} &mdash; {{ d.why }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if harvest.blocked %}
+  <p class="limit">Left alone because they are other people&rsquo;s writing:
+    {{ harvest.blocked|join(", ") }}.</p>
+  {% endif %}
+  {% if harvest.truncated %}
+  <p class="limit">This file had more lines than 400, so the list stopped there. Nothing was
+    lost from your profile &mdash; only from this one read.</p>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if day %}
 <h2>Today&rsquo;s line, three ways</h2>

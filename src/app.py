@@ -39,6 +39,7 @@ from src.agent import modes as agent_modes
 from src.agent import orchestrator, tools as agent_tools
 from src.agent import roster as agent_roster
 from src.agent.tools import Kit
+from src.captions import harvest as voice_harvest
 from src.captions import tags as caption_tags
 from src.captions import tone as caption_tones
 from src.captions import voice_register as caption_kit
@@ -448,6 +449,15 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
             spend=db.get_spend())
         return page(request, "weekly.html", agenda=agenda, plan=plan)
 
+    harvest_root = state_dir
+
+    def harvest_staged():
+        """The lines the last export gave up, waiting on her tick, or None."""
+        return voice_harvest.staged(harvest_root)
+
+    def forget_harvest() -> None:
+        voice_harvest.clear(harvest_root)
+
     @app.get("/write", response_class=HTMLResponse)
     def writer(request: Request, note: str = ""):
         """Spec 5.6: the voice comes from what she pasted, never from a persona, and no
@@ -456,15 +466,21 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         samples = db.get_voice()
         profile = voice.learn(samples)
         pasted = "\n\n".join(samples)
+        origin = (db.recall("voice-source") or [{}])[0].get("body", "")
+        staged = harvest_staged()
+        seen = {"harvest": staged, "origin": origin,
+                "dropped": (staged or {}).get("dropped", []),
+                "picked": {s["text"] for s in (staged or {}).get("lines", [])} & set(samples)}
         if not answers or not plan or not Interview.complete(answers):
             return page(request, "write.html", profile=profile, variants=[], day=None,
                         samples_text=pasted,
                         note=note or "The writer cuts today&rsquo;s line into three platforms. "
-                                     "It needs the interview and a plan before it has a line.")
+                                     "It needs the interview and a plan before it has a line.",
+                        **seen)
         day = day_for(answers, plan, date.today())
         variants = voice.package(subject_of(answers), day.hypothesis, date.today(), profile)
         return page(request, "write.html", profile=profile, variants=variants, day=day,
-                    samples_text=pasted, note=note)
+                    samples_text=pasted, note=note, **seen)
 
     @app.post("/write/samples", response_class=HTMLResponse)
     async def writer_samples(request: Request):
@@ -472,10 +488,80 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         blocks = [b.strip() for b in re.split(r"\n\s*\n", str(form.get("samples", "") or ""))
                   if b.strip()]
         db.save_voice(blocks)
+        # The box replaces the whole profile, so any claim that it was read out of a file is now
+        # about a profile that no longer exists. The staged batch stays: it is still hers to tick.
+        for row in db.recall("voice-source"):
+            db.forget(row["id"])
         note = (f"Learned from {len(blocks)} thing{'s' if len(blocks) != 1 else ''} you "
                 "actually wrote." if blocks else
                 "Cleared. The writer is back to guessing, and it will say so on every line.")
         return RedirectResponse(f"/write?note={quote(note)}", status_code=303)
+
+    @app.post("/write/harvest", response_class=HTMLResponse)
+    async def writer_harvest(request: Request):
+        """Her own data export, read here on this machine for the writing in it.
+
+        The lines it finds are staged, not learned: a voice profile built out of a caption she
+        never wrote is the exact thing this app promises not to do, so the keeping stays hers.
+        """
+        form = await request.form()
+        upload = form.get("file")
+        if not getattr(upload, "filename", ""):
+            return RedirectResponse(f"/write?note={quote('No file came through. Choose the '
+                                                        'archive the platform mailed you, or a '
+                                                        '.json / .csv / .txt of your own posts.')}",
+                                   status_code=303)
+        name = upload.filename.replace("\\", "/").rsplit("/", 1)[-1][:60]
+        got = voice_harvest.read(await upload.read(), name=name)
+        if not got.samples:
+            return RedirectResponse(f"/write?note={quote(got.error or f'Nothing in {name} was '
+                                                            'writing this can read.')}",
+                                   status_code=303)
+        voice_harvest.stage(harvest_root, got)
+        note = (f"{len(got.samples)} line{'s' if len(got.samples) != 1 else ''} of your own "
+                f"writing read out of {got.name}. Nothing is learned yet - the list is on this "
+                "page for you to keep or drop.")
+        return RedirectResponse(f"/write?note={quote(note)}", status_code=303)
+
+    @app.post("/write/harvest/keep", response_class=HTMLResponse)
+    async def writer_harvest_keep(request: Request):
+        """The lines she ticks become her voice, and the file says where they came from."""
+        staged = harvest_staged()
+        if not staged:
+            return RedirectResponse(f"/write?note={quote('That batch is gone. Send the export '
+                                                        'again and the list comes back.')}",
+                                   status_code=303)
+        form = await request.form()
+        picked = []
+        for spot in form.getlist("keep"):
+            try:
+                picked.append(staged["lines"][int(spot)]["text"])
+            except (ValueError, IndexError, KeyError):
+                continue
+        if not picked:
+            return RedirectResponse(f"/write?note={quote('Not one line kept, so your voice '
+                                                        'profile is still exactly what it was. '
+                                                        'The list stays here if you change your '
+                                                        'mind.')}", status_code=303)
+        had = [s.strip() for s in db.get_voice() if s.strip()]
+        merged = had + [p for p in picked if p not in had]
+        cut = len(merged) > voice_harvest.MAX_SAMPLES
+        db.save_voice(merged[:voice_harvest.MAX_SAMPLES])
+        for row in db.recall("voice-source"):
+            db.forget(row["id"])
+        db.remember("voice-source", staged["provenance"], source=staged["name"])
+        forget_harvest()
+        note = (f"Your voice is measured from {len(db.get_voice())} line"
+                f"{'s' if len(db.get_voice()) != 1 else ''} now, "
+                f"{len(picked)} of them read out of {staged['name']}."
+                + (" The list hit its ceiling and the last ones were dropped." if cut else ""))
+        return RedirectResponse(f"/write?note={quote(note)}", status_code=303)
+
+    @app.post("/write/harvest/drop", response_class=HTMLResponse)
+    def writer_harvest_drop():
+        forget_harvest()
+        return RedirectResponse(f"/write?note={quote('Left those lines alone. Nothing from that '
+                                                    'file is in your voice.')}", status_code=303)
 
     @app.get("/engage", response_class=HTMLResponse)
     def engage_page(request: Request, note: str = ""):

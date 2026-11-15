@@ -23,6 +23,8 @@ the word a caption filter is likely to look at, as a note beside the line rather
 of it.
 """
 
+from dataclasses import replace
+
 from src.captions import register as caption_register
 from src.strategist import voice as voice_module
 
@@ -42,4 +44,8 @@ def voice_register(db):
     reg = caption_register.of(profile, samples, want_abbrevs=bool(prefs["casual"]),
                              want_markers=bool(prefs["markers"]),
                              corrections=caption_register.fixes(db.recall("caption-fix")))
+    origin = (db.recall("voice-source") or [{}])[0].get("body", "")
+    if samples and origin:
+        reg = replace(reg, notes=tuple(reg.notes)
+                      + ("Measured from your own file, not typed in: " + origin,))
     return profile, reg

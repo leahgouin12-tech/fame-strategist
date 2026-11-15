@@ -68,9 +68,10 @@ DESKS = (
     Desk("voice", "The Voice",
          "Writes the line for each placement in the casing she actually types in, in the "
          "temperature she asks for, picks the tags it can account for, and drafts the replies.",
-         ("copy.packs", "copy.tone", "copy.tags", "community.drafts"),
+         ("copy.packs", "copy.tone", "copy.tags", "community.drafts", "voice.harvest"),
          ("caption", "hook", "write", "copy", "reply", "replies", "comment", "what do i say",
-          "wording", "tone", "cunty", "funny", "aesthetic", "selfie", "hashtag"),
+          "wording", "tone", "cunty", "funny", "aesthetic", "selfie", "hashtag", "my voice",
+          "sound like me"),
          # "trending hashtags" names The Scout's word and this desk's tool; copy.tags is the one
          # that answers it.
          ("hashtag",)),

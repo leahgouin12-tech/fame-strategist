@@ -249,6 +249,14 @@ a:hover { text-decoration-color: var(--bone-dim); }
 .row button, .row .btn { margin-top: 0; }
 .assume { margin: 12px 0 6px; padding-left: 20px; color: var(--muted); font-size: 13.5px; }
 .assume li { margin: 4px 0; }
+.vh-list { border-top: 1px solid var(--rule-soft); margin: 10px 0 4px; }
+.vh {
+  display: grid; grid-template-columns: 22px 1fr; gap: 4px 10px; align-items: start;
+  padding: 12px 2px; border-bottom: 1px solid var(--rule-soft); cursor: pointer;
+}
+.vh input { margin: 4px 0 0; }
+.vh-text { color: var(--text); font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+.vh-from { grid-column: 2; font: 400 11px/1.4 var(--mono); letter-spacing: .04em; color: var(--faint); }
 .checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; }
 .checks span { color: var(--text); font-size: 14px; }
 details summary {

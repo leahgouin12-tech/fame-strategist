@@ -22,6 +22,7 @@ from pathlib import Path
 from src.experiment import ledger as experiment
 from src.experiment import repurpose
 from src import accounts
+from src.captions import harvest
 from src.captions import tags as tag_tool
 from src.captions import tone as tones
 from src.captions import voice_register as caption_kit
@@ -127,7 +128,8 @@ class Tool:
             if need == "photos" and not kit.photos():
                 return "the inbox holds no readable picture"
             if need == "voice" and not kit.db.get_voice():
-                return "she has not pasted anything she wrote, so the voice is a guess"
+                return ("she has not pasted anything she wrote or handed over an export, so the "
+                        "voice is a guess")
         return ""
 
 
@@ -825,6 +827,52 @@ def recall(kit, limit: int = 12):
                    f"about you, with the date it was learned.", notes=rows)
 
 
+def voice_harvest(kit, name: str = ""):
+    """Read a data export she dropped in the inbox, then stop at the list.
+
+    Staging is the whole point of this tool. The app may not decide on its own that a sentence is
+    hers, so the agent pulls the captions out, says what it found and what it left alone, and the
+    Writer page keeps the tick boxes.
+
+    The newest file that actually holds captions wins, because the inbox also holds her pictures
+    and any sidecar the app wrote beside them - a stray .json with no captions in it is not a
+    reason to tell her the export did not work.
+    """
+    inbox = Path(kit.paths["inbox"])
+    files = sorted([p for p in inbox.iterdir()
+                    if p.is_file() and p.suffix.lower() in harvest.EXPORT_SUFFIXES],
+                   key=lambda p: p.stat().st_mtime, reverse=True) if inbox.is_dir() else []
+    if name:
+        picked = [p for p in files if p.name.lower() == str(name).lower()]
+        if not picked:
+            return skipped(f"{name} is not in the inbox folder. The exports it can see right "
+                           f"now: {', '.join(p.name for p in files) or 'none'}.")
+        files = picked
+    if not files:
+        return skipped("no data export is in the inbox folder. Ask the platform for a copy of "
+                       "your own data, put the file it mails you into data/inbox, and ask again.")
+    got, why = None, ""
+    for spot in files[:5]:
+        try:
+            reading = harvest.read(spot.read_bytes(), name=spot.name)
+        except OSError as exc:
+            why = f"{spot.name} could not be opened ({exc.strerror or 'unreadable'})."
+            continue
+        if reading.samples:
+            got = reading
+            break
+        why = reading.error or f"Nothing in {spot.name} was writing this can read."
+    if got is None:
+        return skipped(why)
+    harvest.stage(Path(kit.paths["root"]), got)
+    return did(f"{len(got.samples)} line{'s' if len(got.samples) != 1 else ''} of your own writing "
+               f"read out of {got.name}. They are staged, not learned - the Writer page has the "
+               "tick boxes, and your voice changes only from the ones you keep.",
+               file=got.name, kind=got.kind, lines=len(got.samples),
+               dropped=len(got.dropped), skipped_keys=got.blocked, truncated=got.truncated,
+               provenance=got.provenance(), where="/write")
+
+
 REGISTRY: dict[str, Tool] = {}
 
 
@@ -836,6 +884,10 @@ def add(tool_id, name, dept, cap, needs=(), args=(), describe=""):
     return wrap
 
 
+add("voice.harvest", "Read the captions out of her export", "Make", "make", args=("name",),
+    describe="Pulls the lines she actually wrote out of a data export already sitting in "
+             "data/inbox, names the conversation keys it left alone, and stages the list. "
+             "Nothing becomes her voice until she keeps it on the Writer page.")(voice_harvest)
 add("research.library", "Search the sourced library", "Research", "research", args=("topic",),
     describe="Finds documented claims on a topic with their tier, their date and what each "
              "one does not prove.")(library)
