@@ -107,12 +107,16 @@ final class ServerViewController: UIViewController, WKNavigationDelegate {
 
     /// The one screen that has to be honest about the laptop being asleep: a web view that cannot
     /// reach the address says so in words, and offers the two fixes that actually exist.
+    ///
+    /// The label is `withError`, which is what WebKit's own header spells it as - writing `with`
+    /// compiles, quietly stops being the delegate method, and leaves this screen never arriving.
+    /// Xcode 26.6 printed the requirement in full when it rejected the first version of this line.
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
-                 with error: Error) {
+                 withError error: any Error) {
         let code = (error as NSError).code
-        guard code == NSURLErrorNotConnectedToServer || code == NSURLErrorTimedOut
-            || code == NSURLErrorCannotFindHost || code == NSURLErrorCannotConnectToHost
-            || code == NSURLErrorNetworkConnectionLost else { return }
+        let unreachable: [URLError.Code] = [.notConnectedToServer, .timedOut, .cannotFindHost,
+                                            .cannotConnectToHost, .networkConnectionLost]
+        guard unreachable.contains(where: { $0.rawValue == code }) else { return }
         let alert = UIAlertController(
             title: "The laptop did not answer",
             message: "This app is a window onto your computer, so it needs the computer awake, on "
