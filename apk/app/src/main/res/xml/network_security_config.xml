@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain http is allowed exactly where this app can only be: the private wifi ranges a laptop
+     gets a DHCP address from, and the mDNS names that resolve on the same lan. Everything else
+     stays refused by the platform, so a mistyped address cannot quietly hand her PIN to a
+     captive portal or a public host. Same scoping decision as NSAppTransportSecurity in
+     ios/FameStrategist/Info.plist, for the same reason. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">local</domain>
+    </domain-config>
+    <subnet-config cleartextTrafficPermitted="true">
+        <subnet address="10.0.0.0" prefix="8" />
+        <subnet address="172.16.0.0" prefix="12" />
+        <subnet address="192.168.0.0" prefix="16" />
+    </subnet-config>
+</network-security-config>

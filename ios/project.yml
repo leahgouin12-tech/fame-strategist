@@ -1,0 +1,50 @@
+# The iPhone wrapper, as one file. XcodeGen turns this into a .xcodeproj on any Mac.
+#
+# The build already has a home: `.github/workflows/ipa.yml` runs these steps on a free macOS
+# runner and uploads the unsigned .ipa as an artifact. It compiles with CODE_SIGNING_ALLOWED=NO,
+# because the signing identity is not GitHub's to hold - AltServer signs the downloaded .ipa with
+# her own Apple ID on her Windows PC (AltStore's own Windows instructions say so), which is why
+# this route needs no Mac of its own and no paid developer account.
+#
+# The same two commands, by hand on a Mac, if a runner is ever the harder option:
+#
+#   brew install xcodegen && cd ios && xcodegen generate
+#   xcodebuild -project FameStrategist.xcodeproj -scheme FameStrategist \
+#     -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' \
+#     -derivedDataPath build/DerivedData build
+#
+# ...then zip build/DerivedData/Build/Products/Release-iphoneos/FameStrategist.app into a
+# Payload/ folder and rename the archive .ipa; that is exactly what the workflow does.
+#
+# Nothing in ios/ has been compiled yet, and that is the honest state: the first green run is the
+# first time any of this Swift meets a compiler. docs/superpowers/specs/
+# 2026-11-15-alt-store-packaging-design.md records what is verified and what is not, including the
+# one open question - whether AltStore will fetch a plain-http source from her wifi at all.
+#
+# `PRODUCT_BUNDLE_IDENTIFIER` below is the same string src/store/altsource.py publishes as
+# bundleIdentifier; AltStore matches the two against the binary, so they must never drift.
+
+name: FameStrategist
+options:
+  bundleIdPrefix: com.fame
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  FameStrategist:
+    type: application
+    platform: iOS
+    sources:
+      - FameStrategist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fame.strategist
+        INFOPLIST_FILE: FameStrategist/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FameStrategist/Fame.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

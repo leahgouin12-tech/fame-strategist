@@ -1,0 +1,72 @@
+# The Mac this project does not own, borrowed for four minutes.
+#
+# An .ipa can only be compiled by Apple's toolchain, and that toolchain only runs on macOS. This is
+# the $0 way to get one: GitHub Actions' macOS runner builds the wrapper in ios/ and hands back the
+# artifact. Nothing here signs anything - signing is AltServer's job on her own Windows PC, with her
+# own Apple ID, which is exactly how AltStore Classic works (verified on AltStore's own
+# "How to Install (Windows)" page on 2026-11-15: iTunes + iCloud + Apple ID + Wi-Fi sync, no Mac).
+#
+# So the build is deliberately UNSIGNED. AltStore re-signs a source's .ipa with her personal
+# certificate when it installs it, and a personal certificate is precisely what it gets from
+# AltServer; a CI runner has no way to hold her Apple ID and should never try.
+#
+# Two things must be true before this can run, and both are hers: the repository needs a GitHub
+# remote (macOS minutes are free on a public repository, billed on a private one), and the first
+# green run is also the first time any of this Swift has ever been compiled - the code is written to
+# Apple's APIs but it has never met a compiler, and this job is what finds out.
+
+name: ipa
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ipa.yml'
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Say which toolchain is doing the work
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Turn project.yml into a project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Compile for the device, sign nothing
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild -project FameStrategist.xcodeproj \
+            -scheme FameStrategist \
+            -sdk iphoneos -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Pack Payload/ into an .ipa
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          app="build/DerivedData/Build/Products/Release-iphoneos/FameStrategist.app"
+          test -d "$app" || { echo "no built app at $app" >&2; exit 1; }
+          rm -rf build/Payload FameStrategist.ipa
+          mkdir -p build/Payload
+          cp -R "$app" build/Payload/
+          (cd build && zip -qry ../FameStrategist.ipa Payload)
+          ls -l FameStrategist.ipa
+          shasum -a 256 FameStrategist.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fame-strategist-ipa
+          path: ios/FameStrategist.ipa
+          if-no-files-found: error

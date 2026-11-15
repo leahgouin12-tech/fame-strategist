@@ -27,7 +27,7 @@ import time
 from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from PIL import Image
@@ -62,6 +62,8 @@ from src.metrics import bench as benchmod
 from src.money import rate as money
 from src.registry import audit as regaudit
 from src.seo import text as seo
+from src.store import altsource as altstore
+from src.store import inventory as store_inv
 from src.metrics.adapt import DATA_FLOOR, analyse, apply
 from src.metrics.ingest import read_csv, read_quick
 from src.media.aesthetic import WEIGHTS, judge_photo
@@ -69,7 +71,7 @@ from src.media.appearance import CONTRACT as FACE_CONTRACT
 from src.media.appearance import read_file as read_face
 from src.media.clean import fix
 from src.media.edit import (ARITY, PRESETS, RAILS, RAIL_TOOLS, SAVE_QUALITY, SLIDERS, TITLES,
-                            edit_file, normalize, tools_json)
+                            edit_file, normalize, reach_of, tools_json)
 from src.media.judge import IMAGE_SUFFIXES, inbox_files, judge, measure
 from src.playbook import live, research
 from src.playbook.store import Store
@@ -156,10 +158,19 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         /static stays open because the PIN box has to look like the app to be believed, and
         there is nothing in it worth stealing. Everything holding her files or her numbers is
         behind the cookie.
+
+        The store's listing file and its package downloads are open for the same reason, but
+        for a different one: an installer app (AltStore, or a browser accepting an `.apk`)
+        fetches a URL on its own and cannot carry her cookie, so behind the PIN it would
+        download nothing and call that a broken source. What those two answer is the app's own
+        name, its own copy and the binaries in `data/packages` - never a photo, a caption or a
+        number. The `/store` page itself stays gated, because it shows which LAN address the
+        listing was built for. If she wants the door fully shut, she empties `data/packages`.
         """
         path = request.url.path
         if (not from_phone(request) or path.startswith("/static")
-                or path in ("/phone/unlock", "/favicon.ico")):
+                or path in ("/phone/unlock", "/favicon.ico", "/store/apps.json")
+                or path.startswith("/store/dl/")):
             return await call_next(request)
         if gate.accepts(request.cookies.get(net.COOKIE, "")):
             return await call_next(request)
@@ -1386,6 +1397,31 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
         return Response(content=preview_bytes(src, recipe_of(ops), not full),
                         media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
+    @app.get("/edit/reach")
+    def edit_reach(name: str = "", op: str = "", vals: str = ""):
+        """The strongest stroke the brush on screen can actually deliver.
+
+        The mesh brushes refuse to fold pixels over, and where that refusal falls is a
+        property of the brush rather than of the number - so the page asks, and the
+        slider ends at the answer instead of offering travel that moves a digit and
+        nothing else.
+        """
+        src = inbox_file(name)
+        if src is None:
+            raise HTTPException(status_code=404)
+        top = None
+        try:
+            args = json.loads(vals or "[]")
+            with Image.open(src) as handle:
+                w, h = handle.size
+            if isinstance(args, list):
+                top = reach_of(op, args, w, h)
+        except (OSError, ValueError, TypeError):
+            top = None
+        body = json.dumps({"max": round(top, 2) if top is not None else None})
+        return Response(content=body, media_type="application/json",
+                        headers={"Cache-Control": "no-store"})
+
     @app.post("/edit/save", response_class=HTMLResponse)
     async def edit_save(request: Request):
         form = await request.form()
@@ -2010,6 +2046,53 @@ def create_app(config: Config | None = None, db_path: Path | None = None) -> Fas
                                             "again, including one you no longer own.")
         response.delete_cookie(net.COOKIE)
         return response
+
+    # ---- the store --------------------------------------------------------------
+    # Packages are the one place this app hands out an installable file, and it can only hand out
+    # what is genuinely in data/packages. `inventory` counts bytes on disk and `altsource` refuses to
+    # write a version entry for a build that was never compiled, so an empty folder shows up as an
+    # empty folder - the fake "ready" state this project forbids has nowhere to come from.
+    #
+    # The listing and the two download paths answer a phone that has not answered the PIN, because
+    # an installer app has no way to carry her cookie and would otherwise never fetch anything. What
+    # those two endpoints expose is the built binary and its own metadata - no photos, no numbers, no
+    # files - and the page says so in plain words instead of leaving her to discover it.
+
+    def store_base(request) -> str:
+        """The address a phone would type, not the one the laptop already has.
+
+        AltStore and an Android browser both have to reach these URLs from the other device, so a
+        loopback base would build a listing that points at the wrong machine. The port comes from the
+        request the app is actually answering; the host comes from the adapter that carries her wifi.
+        """
+        hosts = net.lan_addresses()
+        host = hosts[0] if hosts else (request.url.hostname or "127.0.0.1")
+        port = request.url.port or 8756
+        scheme = request.url.scheme or "http"
+        return f"{scheme}://{host}:{port}"
+
+    @app.get("/store", response_class=HTMLResponse)
+    def store_page(request: Request):
+        base = store_base(request)
+        items = store_inv.scan(state_dir)
+        return page(request, "store.html", artifacts=items, base=base,
+                    json_url=base + "/store/apps.json", listing=altstore.listing_for(state_dir),
+                    addresses=net.lan_addresses())
+
+    @app.get("/store/apps.json")
+    def store_apps(request: Request):
+        body = json.dumps(altstore.source(store_inv.scan(state_dir), state_dir,
+                                          store_base(request)), indent=2)
+        return Response(content=body, media_type="application/json",
+                        headers={"Cache-Control": "no-store"})
+
+    @app.get("/store/dl/{name}")
+    def store_download(name: str):
+        top = store_inv.resolve(state_dir, name)
+        if top is None:
+            raise HTTPException(status_code=404,
+                                detail="no package by that name on this machine")
+        return FileResponse(top, filename=name, headers={"Cache-Control": "no-store"})
 
     # ---- the agent ------------------------------------------------------------
     # Assembled here, at the end, because the point of the kit is that it hands the tools

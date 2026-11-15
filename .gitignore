@@ -21,3 +21,12 @@ data/browser/
 data/shot-*.png
 src/static/_proof.html
 vibe_images/
+
+# Built packages and the keys that sign them: neither belongs in the repository.
+data/packages/
+keystore/
+apk/.gradle/
+apk/build/
+apk/app/build/
+ios/build/
+scratch/

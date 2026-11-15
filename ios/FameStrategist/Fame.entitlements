@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- No entitlements. A wrapper that only opens a webpage on the local network asks Apple for
+     nothing, and src/store/altsource.py publishes ENTITLEMENTS as an empty list on purpose: AltStore
+     compares this file with the compiled binary, so the honest match is empty-to-empty.
+     tests/store/test_store.py asserts the parsed file has no keys and that the published list is
+     empty, so adding one here without the other is a failing test rather than a silent mismatch. -->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

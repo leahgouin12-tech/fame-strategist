@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Store &middot; Fame Strategist{% endblock %}
+{% block body %}
+<h1>Store</h1>
+<p class="sub">This page is the shop window for the one copy that exists: your own machine. It
+serves whatever built package is genuinely sitting in <code>data/packages</code>, and it writes the
+listing file an alternative app store reads &mdash; from those same bytes, never ahead of them. So
+an empty list below means no build has been dropped in yet, not a broken button.</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Packages on this machine</h2>
+    {% if artifacts %}
+    <table class="tbl">
+      <thead><tr><th>File</th><th>Device</th><th>Size</th><th>Built</th><th>Download</th></tr></thead>
+      <tbody>
+      {% for item in artifacts %}
+        <tr>
+          <td><code>{{ item.name }}</code></td>
+          <td>{{ 'Android' if item.kind == 'android' else 'iPhone' }}</td>
+          <td>{{ item.megabytes }}</td>
+          <td>{{ item.modified }}</td>
+          <td><a href="{{ item.url }}">get it</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="k">Each row is a file that exists right now; the size and the date are read off it, not
+      typed in. The checksum of the newest one is
+      <code>{{ artifacts[0].sha256[:16] }}&hellip;</code> &mdash; run
+      <code>certutil -hashfile data\packages\{{ artifacts[0].name }} SHA256</code> and the first
+      characters should match, which is how you catch a half-copied build.</p>
+    {% else %}
+    <p class="claim">Nothing here yet. Build a package and drop the file in
+      <code>data/packages</code>; this page picks it up on the next reload, and the listing file
+      stays empty until it does.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>iPhone &mdash; the route, step by step</h2>
+    <p class="k">Two separate jobs, and only one of them needs Apple&rsquo;s tools. Compiling the
+      wrapper is the job a Mac owns; <em>signing</em> it is not. AltStore&rsquo;s own Windows
+      instructions say AltServer runs on this PC and signs with your Apple ID, so the iPhone half is:
+      build unsigned on a free macOS runner, hand the file to this machine, let AltServer sign it.</p>
+    <ol class="shots">
+      <li><strong>Compile, unsigned.</strong> <code>.github\workflows\ipa.yml</code> builds
+        <code>ios\</code> on a free macOS runner with XcodeGen and Apple&rsquo;s
+        <code>xcodebuild</code>, then zips the built app into <code>FameStrategist.ipa</code> and
+        uploads it as a download. Signing is deliberately turned off in that file because the
+        certificate is yours, not the runner&rsquo;s.</li>
+      <li><strong>Put the file where this page can see it.</strong> Unzip the artifact into
+        <code>data\packages</code>. This page picks it up on the next reload and the listing file
+        below stops being empty &mdash; it is generated from that file&rsquo;s bytes, so the size and
+        the date in it are measured, never typed.</li>
+      <li><strong>Install AltServer on this PC.</strong> AltStore&rsquo;s Windows page requires iTunes
+        and iCloud installed directly from Apple (not the Microsoft Store builds), with wifi sync
+        enabled. Then <em>you</em> type your Apple ID and password into AltServer &mdash; that is
+        your credential and this app never touches it.</li>
+      <li><strong>Add the source on the phone.</strong> Paste the listing URL below into
+        AltStore&rsquo;s source field, on a phone joined to the same wifi with this laptop awake.</li>
+      <li><strong>Let it keep itself installed.</strong> A personal signature is short-lived, so
+        AltServer refreshes it in the background. How many apps and how many days a given account
+        type allows is carried in AltStore&rsquo;s own pages and was <em>not</em> verified here.</li>
+    </ol>
+    <p class="claim">The one thing nobody has answered yet: every URL in that listing is plain
+      <code>http</code> on your wifi. AltStore&rsquo;s source documentation never requires HTTPS
+      &mdash; it just shows https in its examples and says nothing about a local address &mdash; so
+      whether the AltStore app is allowed to fetch a source over plain http is AltStore&rsquo;s and
+      iOS&rsquo;s decision, not this file&rsquo;s. It cannot be settled on paper. The first test of
+      step 4 answers it, and if it refuses, the only fix is hosting the two files somewhere public,
+      which is the thing you said you do not want &mdash; then the honest iPhone app stays the
+      home-screen one below.</p>
+    <h3>What is already true today</h3>
+    <p class="k"><a href="/phone">The Phone page</a> installs this as a home-screen app: Share
+      &rarr; Add to Home Screen gives it its own icon, no address bar and its own window, with
+      nothing hosted. That works on your account in the United States, and it is not a store
+      listing.</p>
+    <p class="k">Apple&rsquo;s alternative-marketplace rules &mdash; Brazil, Japan or the EU, by
+      account region <em>and</em> where the phone physically is &mdash; are about installing from
+      a marketplace. AltStore Classic&rsquo;s path is your own Apple ID signing your own build;
+      the pages read here state no region limit for it.</p>
+    <h3>What has not happened yet</h3>
+    <p class="claim">No <code>.ipa</code> exists, and none has ever been compiled: the Swift in
+      <code>ios\</code> has not been through a compiler once, so the first green CI run is also
+      the first real test of it. That action cannot run until this repository has a remote.</p>
+  </div>
+
+  <div class="card">
+    <h2>The listing file</h2>
+    <p class="k">A store client reads one JSON file. This app writes it live from the packages above
+      &mdash; <a href="/store/apps.json">/store/apps.json</a> &mdash; with the address a phone would
+      use:</p>
+    <p class="claim"><code>{{ json_url }}</code></p>
+    <p class="k">Paste that into AltStore&rsquo;s source field on a phone that can reach this
+      machine. Today it carries {{ artifacts|selectattr('kind', 'equalto', 'ios')|list|length }}
+      iPhone build{{ 's' if artifacts|selectattr('kind', 'equalto', 'ios')|list|length != 1 else '' }},
+      because that is what is on disk.</p>
+    <p class="k">The words on that listing are the app&rsquo;s name, subtitle and description shown
+      here: <strong>{{ listing.name }}</strong> &mdash; {{ listing.subtitle }}. Edit them in
+      <code>data/packages/store.json</code> and the file changes; the bundle id and version are not
+      editable there, because a listing that disagrees with its own binary gets refused at
+      install.</p>
+  </div>
+
+  <div class="card">
+    <h2>Who can reach this page</h2>
+    <p class="k">The pages that hold your photos and your numbers sit behind the PIN on the
+      <a href="/phone">Phone</a> page. This one, plus the listing file and the downloads, answers a
+      phone that has not typed the PIN &mdash; deliberately, because an installer app cannot carry
+      your cookie and would otherwise fetch nothing. What those three expose to your wifi is the
+      built app and its description; there is no database, no inbox and no key in them.</p>
+    <p class="k">If you would rather that door stayed shut, delete the files in
+      <code>data/packages</code> &mdash; with nothing to hand out there is nothing to reach.</p>
+  </div>
+
+  <div class="card">
+    <h2>Android &mdash; written, parked</h2>
+    <p class="k">You said iPhone only, so this is not a step to do; it is work that already exists
+      and costs nothing to leave alone. <code>apk\</code> holds the same wrapper as two Kotlin
+      screens &mdash; a first-run address box and a WebView with the file chooser, camera grant and
+      download listener wired up &mdash; and plain http is allowed only on the private wifi ranges
+      and <code>.local</code> names, so a mistyped address cannot hand your PIN to a captive portal.
+      <code>scripts\make_keystore.ps1</code> then <code>scripts\build_apk.ps1</code> would produce a
+      signed APK on this machine, and <code>.github\workflows\apk.yml</code> builds the identical
+      project on a free Linux runner. Nothing has been compiled: there is no JDK, Gradle or Android
+      SDK here, and an APK needs none of Apple&rsquo;s rules, no review and no region answer &mdash;
+      the download itself is the store. It stays here, unused, until an Android phone is actually in
+      the picture.</p>
+  </div>
+</div>
+
+<div class="need">
+  <strong>What this is not.</strong> It is not a hosted app. Every package on this page is a window
+  onto <em>this</em> machine: install it on a phone that is not on your wifi, or open it while the
+  laptop sleeps, and it shows you a page that cannot load. That is the same trade the Phone page
+  makes, and it is why a public store listing is only useful to people you have told the address
+  of &mdash; the file is installable by anyone, the app works for nobody but you. What is on this
+  page is the listing and the download; publishing to itch.io, Aptoide or AltStore is still your
+  account, your taps and your name, and nothing here does it for you.
+</div>
+{% endblock %}

@@ -1,0 +1,73 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// Signing is optional on purpose. With these four properties the release build comes out signed
+// and installable; without them Gradle still produces app-release-unsigned.apk, which Android
+// refuses - so scripts/build_apk.ps1 says that in words instead of calling the file a build.
+// scripts/make_keystore.ps1 creates the keystore these point at.
+def keystorePath = findProperty('fameKeystore')
+def storeSecret = findProperty('fameKeystorePassword')
+def keyAliasName = findProperty('fameKeyAlias')
+def keySecret = findProperty('fameKeyPassword')
+def signed = keystorePath && storeSecret && keyAliasName && keySecret
+
+android {
+    namespace 'com.fame.strategist'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.fame.strategist'
+        minSdk 26
+        targetSdk 35
+        // 1.0 / 1 - the same pair src/store/altsource.py publishes for iOS, so the two packages
+        // of this one app never claim different versions on the two stores.
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        if (signed) {
+            release {
+                storeFile file(keystorePath)
+                storePassword storeSecret
+                keyAlias keyAliasName
+                keyPassword keySecret
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false      // no shrinking: a wrapper this small has nothing to save,
+            shrinkResources false    // and it is the usual cause of icons vanishing from a build
+            if (signed) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        buildConfig false
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*.kotlin_module']
+        }
+    }
+}
+
+dependencies {
+    // Nothing. The whole surface is android.webkit, which ships with the OS.
+}

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key>
+  <string>Fame Strategist</string>
+  <key>CFBundleIdentifier</key>
+  <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleName</key>
+  <string>FameStrategist</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSRequiresIPhoneOS</key>
+  <true/>
+  <key>UILaunchScreen</key>
+  <dict/>
+
+  <!-- The address a phone types is plain http on a private network, which App Transport
+       Security blocks by default. The exception is scoped to web content only: this app has no
+       URLSession calls of its own, so there is nothing else for it to carry in the clear. -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoadsInWebContent</key>
+    <true/>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
+
+  <!-- These three strings are the ones an AltStore source has to repeat exactly: AltStore
+       compares them with the compiled binary and refuses to install on a mismatch. Keep
+       src/store/altsource.py PRIVACY in step with this file - tests/store/test_store.py reads
+       this plist and asserts they match, so drifting one is a failing test, not a broken install. -->
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Fame Strategist sends a photo from this iPhone to your own computer so it can be edited.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Fame Strategist opens the camera so you can shoot straight into an edit on your computer.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Fame Strategist looks for the computer running your app on the wifi you are joined to.</string>
+
+  <key>UIRequiredDeviceCapabilities</key>
+  <array>
+    <string>arm64</string>
+  </array>
+</dict>
+</plist>
