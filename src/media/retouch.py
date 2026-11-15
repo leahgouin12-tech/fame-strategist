@@ -16,6 +16,7 @@ DODGE_GAIN = 0.55      # widest multiplicative swing of the dodge/burn brush at 
 # Per-op, per-position min/max inside one group of args.
 # warp group = x, y, size, amount, mode, feather, angle: Pillow 13's MESH maps cell
 # quads, so the disc's rim is held still by the smoothstep field, not by triangles.
+# slim group = the same seven plus stretch, and three times the reach on slot 3.
 CLAMP = {
     "smooth":   [(0.0, 1.0), (0.0, 1.0), (0.005, 0.60), (0.0, 1.0)],
     "texture":  [(0.0, 1.0), (0.0, 1.0), (0.005, 0.60), (0.0, 1.0)],
@@ -24,13 +25,19 @@ CLAMP = {
     "brighten": [(0.0, 1.0), (0.0, 1.0), (0.005, 0.50), (-1.0, 1.0), (0.0, 1.0)],
     "tint":     [(0.0, 1.0), (0.0, 1.0), (0.005, 0.50), (0.0, 1.0), (0.0, 360.0), (0.0, 1.0)],
     "warp":     [(0.0, 1.0), (0.0, 1.0), (0.010, 0.80), (-1.0, 1.0), (0.0, 2.0), (0.05, 1.0), (0.0, 360.0)],
+    "slim":     [(0.0, 1.0), (0.0, 1.0), (0.010, 0.90), (-3.0, 3.0), (0.0, 2.0), (0.05, 1.0),
+                 (0.0, 360.0), (0.15, 6.0)],
     "eyes":     [(0.0, 1.0), (0.0, 1.0), (0.005, 0.12), (0.0, 1.0)],
 }
+
+# The narrowest a mesh quad may get under a guarded stroke, as a share of its rest width.
+# Below this the warp is no longer moving pixels, it is laying them over each other.
+HOLD = 0.15
 
 # Max strokes per op name, so a hand-edited recipe cannot freeze the machine.
 LIMITS = {
     "smooth": 60, "texture": 60, "matte": 60, "whiten": 60,
-    "brighten": 60, "tint": 60, "warp": 40, "eyes": 40,
+    "brighten": 60, "tint": 60, "warp": 40, "slim": 40, "eyes": 40,
 }
 
 SHAPE = {name: ["group", len(rng), LIMITS[name]] for name, rng in CLAMP.items()}
@@ -298,36 +305,163 @@ def _tint(im, args):
     return out
 
 
-def _warp_field(px, py, cx, cy, r, amount, mode, feather, ang):
-    q = math.hypot(px - cx, py - cy) / r
+def _warp_field(px, py, cx, cy, ra, rb, ca, sa, amount, mode, feather):
+    """Where a pixel inside the brush came from.
+
+    `ang` is the direction the move acts along; the oval runs across it, so a 0-degree
+    axis on a tall brush is one drag down the side of a waist. With a round brush and
+    ang = 0 this is the original horizontal pinch, slot for slot.
+    """
+    dx, dy = px - cx, py - cy
+    a = dx * ca + dy * sa
+    b = dy * ca - dx * sa
+    q = math.hypot(a / ra, b / rb)
     if q >= 1.0:
         return 0.0, 0.0
     w = _fade(min(1.0, (1.0 - q) / feather))
     if mode == 2:
-        s = amount * 0.3 * r * w
-        return s * math.cos(ang), s * math.sin(ang)
-    ox = amount * WARP_K * (px - cx) * w
-    oy = 0.0 if mode == 0 else amount * WARP_K * (py - cy) * w
-    return ox, oy
+        s = amount * 0.3 * min(ra, rb) * w
+        return s * ca, s * sa
+    oa = amount * WARP_K * a * w
+    ob = 0.0 if mode == 0 else amount * WARP_K * b * w
+    return oa * ca - ob * sa, oa * sa + ob * ca
 
 
-def _warp(im, args):
+def _brush(stroke, w, h, stretch=1.0, ang=0.0):
+    """Centre, semi-axes, rotation and the box a stroke has to read, or None if nonsense.
+
+    The box is the axis-aligned bound of the rotated oval, so a brush turned 45 degrees
+    still crops enough of the frame to cover itself.
+    """
+    r = 0.5 * stroke[2] * min(w, h)
+    if r < 2.0:
+        return None
+    cx, cy = stroke[0] * w, stroke[1] * h
+    st = max(0.05, stretch)
+    ra, rb = r, r * st
+    ca, sa = math.cos(ang), math.sin(ang)
+    ex = math.hypot(ra * ca, rb * sa)
+    ey = math.hypot(ra * sa, rb * ca)
+    box = (max(0, int(math.floor(cx - ex))), max(0, int(math.floor(cy - ey))),
+           min(w, int(math.ceil(cx + ex))), min(h, int(math.ceil(cy + ey))))
+    if box[2] - box[0] < 3 or box[3] - box[1] < 3:
+        return None
+    return box, cx, cy, ra, rb, ca, sa
+
+
+def _brush_mask(bw, bh, cx, cy, ra, rb, ca, sa, feather=0.12):
+    """The feathered oval as an L image the size of the box; None if it is all zero.
+
+    Weight is exactly 0 from q = 1 outward, which is what lets a reshape leave every
+    pixel outside its own brush byte-identical.
+    """
+    n = 96
+    px = bytearray(n * n)
+    top = 0
+    for j in range(n):
+        dy = (j / (n - 1)) * bh - cy
+        for i in range(n):
+            dx = (i / (n - 1)) * bw - cx
+            q = math.hypot((dx * ca + dy * sa) / ra, (dy * ca - dx * sa) / rb)
+            t = max(0.0, min(1.0, (1.0 - q) / feather))
+            px[top + i] = max(0, min(255, int(round(255.0 * _fade(t)))))
+        top += n
+    if max(px) == 0:
+        return None
+    return Image.frombytes("L", (n, n), bytes(px)).resize((bw, bh), Image.BILINEAR)
+
+
+def _hold(amount, d, mode, feather):
+    """Rein a stroke back to the strongest setting this brush can take without turning a
+    mesh quad inside out.
+
+    The field is linear in `amount`, so one measured pass at full strength says how steep
+    it is, and past that the quad folds - the smear every body slider is famous for. So
+    the stroke stops short of the fold instead of walking into it.
+
+    The rein is a property of the brush, not of the number: a small or hard-edged brush
+    cannot take what a big soft one can, so `reach` below reports the ceiling to the page
+    and the slider stops there rather than travelling into a setting that does nothing.
+
+    The steepness is measured in the brush's own axes over the whole oval, because the
+    worst gradient is not in the soft middle: as the feather runs out the falloff reverses
+    and the rim shears far harder than the core, so a guard that only samples the core
+    clears a stroke that still folds.
+    """
+    cx, cy, ra, rb, ca, sa = d[1:7]
+
+    def disp(a, b):
+        """The move one unit of amount makes at brush coords (a, b)."""
+        ox, oy = _warp_field(cx + a * ca - b * sa, cy + a * sa + b * ca,
+                             cx, cy, ra, rb, ca, sa, 1.0, mode, feather)
+        return ox * ca + oy * sa, -ox * sa + oy * ca
+
+    e = max(0.5, 0.02 * min(ra, rb))
+    steep = 0.0
+    for a in (0.0, 0.2 * ra, 0.5 * ra, 0.7 * ra, 0.85 * ra, 0.95 * ra, 0.99 * ra):
+        for b in (0.0, 0.2 * rb, 0.5 * rb, 0.7 * rb, 0.85 * rb, 0.95 * rb, 0.99 * rb):
+            oa1, ob1 = disp(a + e, b)
+            oa2, ob2 = disp(a - e, b)
+            oa3, ob3 = disp(a, b + e)
+            oa4, ob4 = disp(a, b - e)
+            steep = max(steep,
+                        (abs(oa1 - oa2) + abs(oa3 - oa4)) / (2 * e),
+                        (abs(ob1 - ob2) + abs(ob3 - ob4)) / (2 * e))
+    if steep <= 1e-6:
+        return amount
+    limit = (1.0 - HOLD) / steep
+    return max(-limit, min(limit, amount))
+
+
+# Which brushes rein themselves in, and which slot carries their oval stretch. A guarded
+# op can only move so far before its mesh quads turn inside out, and that ceiling is the
+# most the strength control may promise.
+GUARDED = {"slim": 7}
+
+
+def reach(args, name, w, h):
+    """The biggest strength a brush of this shape can actually apply, or None if ungoverned.
+
+    Measured the same way the engine measures it, so the page can stop the slider where
+    the pixels stop moving instead of letting the last half of the travel change a digit
+    and nothing else.
+    """
+    if name not in GUARDED:
+        return None
+    rng = CLAMP[name]
+    vals = [min(max(float(v), lo), hi) for v, (lo, hi) in zip(list(args) + [0.0] * 16, rng)]
+    d = _brush(vals, w, h, vals[GUARDED[name]], math.radians(vals[6]))
+    if d is None:
+        return None
+    return _hold(1e9, d, int(round(vals[4])), vals[5])
+
+
+def _reshape(im, groups, stretch_at=None, guard=False):
+    """The one mesh engine behind both reshape brushes: coarse quads read through a
+    displacement field that is exactly zero at the rim of the brush.
+
+    A round brush with no rotation is byte-for-byte the move the Face rail has always
+    made; the oval and the guard are what let the Body slider go far enough to show.
+    """
     out = _rgb(im)
     base = im
-    for st in _strokes(args, "warp"):
+    for st in groups:
         amount = st[3]
         if abs(amount) < 1e-4:
             continue
-        d = _disc(st, out.width, out.height)
+        stretch = st[stretch_at] if stretch_at is not None else 1.0
+        d = _brush(st, out.width, out.height, stretch, math.radians(st[6]))
         if d is None:
             continue
-        box, cx, cy, r = d
-        mode, feather, ang = int(round(st[4])), st[5], math.radians(st[6])
-        pad = int(WARP_K * r) + 3
+        box, cx, cy, ra, rb, ca, sa = d
+        mode, feather = int(round(st[4])), st[5]
+        if guard:
+            amount = _hold(amount, d, mode, feather)
+        pad = int(WARP_K * max(ra, rb)) + 3
         pw_box = (max(0, box[0] - pad), max(0, box[1] - pad),
                   min(out.width, box[2] + pad), min(out.height, box[3] + pad))
         src = out.crop(pw_box)
-        cell = max(4.0, 2.0 * r / 20.0)
+        cell = max(4.0, 2.0 * max(ra, rb) / 20.0)
         nx = max(3, min(24, int(round(src.width / cell))))
         ny = max(3, min(24, int(round(src.height / cell))))
         xs = [int(round(i * src.width / nx)) for i in range(nx + 1)]
@@ -337,8 +471,8 @@ def _warp(im, args):
             row = []
             for i in range(nx + 1):
                 gx, gy = xs[i], ys[j]
-                ox, oy = _warp_field(gx + pw_box[0], gy + pw_box[1], cx, cy, r,
-                                     amount, mode, feather, ang)
+                ox, oy = _warp_field(gx + pw_box[0], gy + pw_box[1], cx, cy, ra, rb,
+                                     ca, sa, amount, mode, feather)
                 row.append((gx, gy,
                             min(max(gx - ox, 0.0), src.width - 1.0),
                             min(max(gy - oy, 0.0), src.height - 1.0)))
@@ -352,15 +486,23 @@ def _warp(im, args):
         warped = src.transform(src.size, Image.MESH, mesh, Image.BILINEAR)
         sub = (box[0] - pw_box[0], box[1] - pw_box[1], box[2] - pw_box[0], box[3] - pw_box[1])
         # the field is already 0 at q = 1; this hard-edged feather is the belt that keeps
-        # every pixel outside the disc byte-exact however the mesh resampler rounds.
-        mask = _mask(box[2] - box[0], box[3] - box[1], cx - box[0], cy - box[1], r,
-                     feather=0.12, amount=1.0)
+        # every pixel outside the brush byte-exact however the mesh resampler rounds.
+        mask = _brush_mask(box[2] - box[0], box[3] - box[1], cx - box[0], cy - box[1],
+                           ra, rb, ca, sa)
         if mask is None:
             continue
         merged = Image.composite(warped.crop(sub), src.crop(sub), mask)
         out = base.copy() if out is base else out
         out.paste(merged, box)
     return out
+
+
+def _warp(im, args):
+    return _reshape(im, _strokes(args, "warp"))
+
+
+def _slim(im, args):
+    return _reshape(im, _strokes(args, "slim"), stretch_at=7, guard=True)
 
 
 def _iris(im, args):
@@ -403,8 +545,9 @@ def _eyes(im, args):
     return out
 
 
-MAX_UNDO = 0.80        # the widest brush any stroke can have made, so an undo can always
-#                        cover it whole - a narrower undo leaves a ring of retouch behind
+MAX_UNDO = 0.90        # the widest brush any stroke can have made (the slim oval at its
+#                        full stretch), so an undo can always cover it whole - a narrower
+#                        undo leaves a ring of retouch behind
 
 
 def restore_pixels(image: Image.Image, source: Image.Image, args) -> Image.Image:
@@ -443,6 +586,7 @@ APPLIERS = {
     "brighten": _brighten,
     "tint": _tint,
     "warp": _warp,
+    "slim": _slim,
     "eyes": _eyes,
 }
 

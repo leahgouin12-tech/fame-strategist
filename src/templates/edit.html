@@ -99,6 +99,7 @@
               value="{{ f.value }}">
             <output>0{{ f.unit }}</output></label>
           {% if f.hint %}<p class="k tiny">{{ f.hint }}</p>{% endif %}
+          {% if tool.cap == f.at %}<p class="k tiny capnote" hidden></p>{% endif %}
           {% endif %}
           {% endfor %}
         </div>
@@ -229,10 +230,48 @@ function refresh(word) {
     document.getElementById("recipe").value = JSON.stringify(r);
     paintLedger(r);
     shot.src = `/edit/preview?name=${NAME}&ops=${encodeURIComponent(JSON.stringify(r))}&t=${Date.now()}`;
+    if (active) capRange(active);
     statusEl.textContent = word || (r.length ? `${r.length} control${r.length > 1 ? "s" : ""} applied.`
                                              : "Nothing applied yet.");
     drawMarks();
   }, 220);
+}
+
+// A mesh stroke stops itself short of folding pixels over, and where it stops is a property
+// of the brush, not of the number. Ask the engine and end the slider there, so nothing in
+// its travel is a digit that moves without the picture moving.
+let capSeq = 0;
+async function capRange(op) {
+  const t = TOOLS[op];
+  if (!t || t.cap < 0) return;
+  const el = document.querySelector(`.tool[data-op="${op}"] input[data-at="${t.cap}"]`);
+  if (!el) return;
+  const note = document.querySelector(`.tool[data-op="${op}"] .capnote`);
+  if (!el.dataset.full) el.dataset.full = el.max;
+  const full = Number(el.dataset.full), step = Number(el.step) || 0.05;
+  const me = ++capSeq;
+  let top = null;
+  try {
+    const got = await fetch(`/edit/reach?name=${NAME}&op=${op}&vals=` +
+      encodeURIComponent(JSON.stringify(group(op, bag(op)))));
+    top = (await got.json()).max;
+  } catch (e) { top = null; }
+  if (me !== capSeq) return;
+  const lim = top === null || top === undefined
+    ? full : Math.min(full, Math.max(step, Math.floor(top / step) * step));
+  el.min = (-lim).toFixed(2);
+  el.max = lim.toFixed(2);
+  const v = Math.max(-lim, Math.min(lim, Number(el.value)));
+  if (v !== Number(el.value)) {
+    el.value = v;
+    setVal(op, t.cap, v);
+    el.closest(".ctl").querySelector("output").textContent = `${trim(v)}${el.dataset.unit}`;
+  }
+  if (note) {
+    note.hidden = lim >= full;
+    note.textContent = `this brush tops out at ${trim(lim)} - a softer Feather or a longer `
+      + `Oval is what lets it go further`;
+  }
 }
 
 function fieldEls(op) { return Array.from(document.querySelectorAll(`.tool[data-op="${op}"] [data-at]`)); }
@@ -252,6 +291,7 @@ function syncFields(op) {
   });
   const count = document.querySelector(`.tool[data-op="${op}"] [data-count]`);
   if (count) count.textContent = t.stroke && s.strokes.length ? String(s.strokes.length) : "";
+  capRange(op);
 }
 function chan(v) {
   return Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * 255).toString(16).padStart(2, "0");

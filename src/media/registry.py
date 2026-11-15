@@ -36,6 +36,7 @@ class Tool:
     points: tuple = (0, 1)      # which slots the position writes into
     repeats: bool = True        # False keeps exactly one position, the last one she tapped
     note: str = ""
+    cap: int = -1               # slot whose live range the engine reports, -1 if ungoverned
 
 
 # Pipeline order. Geometry first, because everything after it is measured in fractions of
@@ -43,7 +44,7 @@ class Tool:
 # smoothed and a second photo always lands on top of the finished picture.
 RAILS = ("frame", "light", "colour", "lens", "skin", "face", "cut", "design", "layer")
 TITLES = {"frame": "Frame", "light": "Light", "colour": "Colour", "lens": "Lens",
-          "skin": "Skin", "face": "Face", "cut": "Cut", "design": "Design",
+          "skin": "Skin", "face": "Face & body", "cut": "Cut", "design": "Design",
           "layer": "Layers"}
 
 FONTS = ("display", "body", "serif", "condensed", "mono")
@@ -102,6 +103,32 @@ SKIN = {
                  stroke=True,
                  note="A real mesh warp. Pixels move, none are invented, and the background "
                       "moves with them - that is what gives a reshape away."),
+    "slim": Tool("slim", "Slim & extend",
+                 (F(2, "brush", "slider", 0.02, 0.9, 0.01, 0.22, "",
+                    "a long oval, not a dot"),
+                  F(3, "strength", "slider", -2.4, 2.4, 0.05, -1.1, "",
+                    "negative pulls toward the middle of the brush, positive pushes away"),
+                  F(4, "motion", "slider", 0, 2, 1, 0, "", "", MOTIONS),
+                  F(5, "feather", "slider", 0.05, 1, 0.05, 0.8, "",
+                    "how soft the edge of the move is - the softer, the further it can go"),
+                  F(6, "axis", "slider", 0, 360, 5, 0, "°",
+                    "which way it squeezes; the oval runs across that"),
+                  F(7, "oval", "slider", 0.2, 6, 0.1, 2.6, "×",
+                    "how far the brush runs across the squeeze - a waist wants 2 to 4")),
+                 stroke=True, cap=3,
+                 note="Same mesh warp as Reshape, three times the reach and an oval instead of "
+                      "a dot, so one drag down a waist or a shoulder does the job. Negative "
+                      "pulls toward the middle of the brush, so sit it on the body just inside "
+                      "the edge you want moved and let the oval reach past it - centred on the "
+                      "outline it will push that edge outward instead. It stops itself short of "
+                      "folding pixels over, which is where the smeared-arm look comes from, and "
+                      "the strength slider ends where that ceiling falls for the brush you have "
+                      "set up: a soft feather and a long oval go furthest, a hard short one "
+                      "stops early. The background travels with the body: a door frame, a tile "
+                      "edge or a tiled wall behind you will bend, and that bends-the-room tell "
+                      "is why these strokes stay modest. Nothing is invented and nothing is "
+                      "masked off - there is no person-shape detection in this build, so it "
+                      "cannot hold the room still while it moves you."),
     "eyes": Tool("eyes", "Eyes",
                  (F(2, "brush", "slider", 0.01, 0.12, 0.005, 0.045),
                   F(3, "amount", "slider", 0, 1, 0.02, 0.45)), stroke=True,
@@ -570,7 +597,8 @@ ORDER = {
              "bokeh", "orton", "rays", "lightleak", "glitch", "pixelate"),
     "skin": ("smooth", "texture", "matte", "heal", "whiten", "patch", "conceal", "red_eye",
              "dewy", "flyaway", "tan", "skin_tone"),
-    "face": ("warp", "swirl", "inflate", "eyes", "brighten", "makeup", "stretch", "restore"),
+    "face": ("warp", "slim", "swirl", "inflate", "eyes", "brighten", "makeup", "stretch",
+             "restore"),
     "cut": ("cutout", "overlay"),
     "design": ("edge_expand", "bg_replace", "glow_edge", "shape_crop", "draw", "sticker",
                "curved_text"),

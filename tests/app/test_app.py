@@ -377,6 +377,32 @@ def test_the_editor_opens_a_file_and_previews_an_edit(tmp_path):
     assert shot.headers["content-type"] == "image/jpeg"
 
 
+def test_the_page_is_told_where_the_strength_control_really_stops(tmp_path):
+    """The slider ends on the number this route hands back, so it must be the same ceiling
+    the engine applies to the stroke - and the page needs the slot to say it out loud."""
+    from PIL import Image
+    from src.media.retouch import reach
+
+    client = _inbox_client(tmp_path)
+    vals = [0.5, 0.5, 0.22, -3.0, 0.0, 0.55, 0.0, 2.6]
+    got = client.get("/edit/reach", params={"name": "sharp.png", "op": "slim",
+                                            "vals": json.dumps(vals)})
+    assert got.status_code == 200
+    with Image.open(tmp_path / "inbox" / "sharp.png") as handle:
+        w, h = handle.size
+    assert got.json()["max"] == pytest.approx(reach(vals, "slim", w, h), abs=0.005)
+    assert "capnote" in client.get("/edit?name=sharp.png").text, \
+        "the editor has nowhere to say where the brush stops"
+    ungoverned = client.get("/edit/reach", params={"name": "sharp.png", "op": "exposure",
+                                                   "vals": "[0.4]"})
+    assert ungoverned.json()["max"] is None, "a control with no ceiling must not invent one"
+    junk = client.get("/edit/reach", params={"name": "sharp.png", "op": "slim",
+                                             "vals": "not json"})
+    assert junk.json()["max"] is None
+    assert client.get("/edit/reach", params={"name": "nope.png", "op": "slim",
+                                             "vals": "[]"}).status_code == 404
+
+
 def test_saving_an_edit_writes_a_copy_and_its_recipe(tmp_path):
     client = _inbox_client(tmp_path)
     recipe = json.dumps([["exposure", 0.4], ["rotate", 2.5], ["nonsense", 1]])

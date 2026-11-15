@@ -325,6 +325,22 @@ TOOL_OF = {tool.op: tool for tool in TOOLS}
 ARITY = {tool.op: arity_of(tool.op) for tool in TOOLS}
 
 
+def reach_of(op: str, vals, w: int, h: int):
+    """How far the strength slider may honestly go for the brush currently set up.
+
+    The mesh brushes rein a stroke back before it folds pixels over, and that ceiling is a
+    property of the brush rather than of the number, so the page asks here instead of
+    promising travel the engine has already decided to refuse.
+    """
+    tool = TOOL_OF.get(op)
+    if tool is None or tool.cap < 0:
+        return None
+    try:
+        return retouch.reach(list(vals), op, w, h)
+    except (TypeError, ValueError):
+        return None
+
+
 def slots(tool: Tool) -> int:
     """How many argument slots a control occupies, counting the three a colour picker
     writes and the two a painted position writes."""
@@ -340,6 +356,7 @@ def tools_json() -> str:
         {"rail": rail, "title": TITLES[rail],
          "tools": [{"op": t.op, "label": t.label, "stroke": t.stroke, "repeats": t.repeats,
                     "points": list(t.points), "arity": ARITY[t.op], "note": t.note,
+                    "cap": t.cap,
                     "fields": [{"at": f.at, "label": f.label, "kind": f.kind, "lo": f.lo,
                                 "hi": f.hi, "step": f.step, "value": f.value, "unit": f.unit,
                                 "hint": f.hint, "options": list(f.options)} for f in t.fields]}
