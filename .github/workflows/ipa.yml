@@ -38,7 +38,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Say which toolchain is doing the work
-        run: xcodebuild -version
+        run: |
+          xcodebuild -version | tee toolchain.txt
+          echo "::notice::toolchain: $(head -1 toolchain.txt)"
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -49,15 +51,22 @@ jobs:
           set -euo pipefail
           xcodegen generate
           # A scheme xcodebuild cannot see is one of the ways this job dies with exit 65 and no clue,
-          # so name the schemes out loud. The job summary below is the reason: unlike the raw log, the
+          # so name the schemes out loud. The job summary is the reason: unlike the raw log, the
           # summary is readable on a public repository without being signed in to GitHub.
-          xcodebuild -list -project FameStrategist.xcodeproj | tee schemes.txt \
-            >> "$GITHUB_STEP_SUMMARY" || true
+          xcodebuild -list -project FameStrategist.xcodeproj > schemes.txt 2>&1 || true
+          cat schemes.txt
+          echo "::notice::schemes: $(tr '\n' ' ' < schemes.txt | sed -e 's/%/%25/g' -e 's/"/%22/g' | cut -c1-220)"
 
       - name: Compile for the device, sign nothing
         working-directory: ios
         run: |
-          set -uo pipefail
+          # errexit has to go before the build, not after it. GitHub hands every run: block to
+          # "bash -e", so the previous version of this step died on the line that reported the failure:
+          # xcodebuild returned 65, errexit ended the script, and the error lines were never printed -
+          # the job was red and, on a public repo where the raw log needs a GitHub login, unreadable.
+          # Taking the exit code as a branch instead of a fall-through is what makes the compiler
+          # publish its own words as annotations, which the API serves to anyone.
+          set +e
           xcodebuild -project FameStrategist.xcodeproj \
             -scheme FameStrategist \
             -sdk iphoneos -configuration Release \
@@ -66,26 +75,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build > xcodebuild.log 2>&1
           status=$?
-          if [ "$status" -ne 0 ]; then
-            # The compiler's own words are the only output worth having, and last time this went red
-            # nobody outside a logged-in GitHub session could read them: the inline log and the log
-            # download are both behind sign-in, while annotations and $GITHUB_STEP_SUMMARY are public.
-            # So the failures get republished through both, and the next red run is debuggable from
-            # the summary page alone.
-            {
-              echo '### xcodebuild failed (exit '"$status"'). First lines it objected to:'
-              echo '```'
-              grep -E "error:|fatal|not currently configured|No such file|The following build commands failed|missing|unavailable" xcodebuild.log | head -30
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            grep -E "error:|fatal|not currently configured|The following build commands failed" xcodebuild.log \
-              | head -12 \
-              | while IFS= read -r line; do
-                  esc=$(printf '%s' "${line:0:200}" | sed -e 's/%/%25/g' -e 's/"/%22/g' | tr -d '\r\n')
-                  echo "::error::$esc"
-                done
-            echo "xcodebuild exited $status - see the run summary for the error lines" >&2
-          fi
+          echo "xcodebuild exited $status"
+          errs=$(grep -nE "error:|fatal|not currently configured|Multiple commands|The following build commands failed" xcodebuild.log | head -14)
+          [ -n "$errs" ] || errs=$(tail -14 xcodebuild.log)
+          while IFS= read -r line; do
+            esc=$(printf '%s' "${line:0:220}" | sed -e 's/%/%25/g' -e 's/#/%23/g' -e 's/"/%22/g' | tr -d '\r')
+            echo "::error::$esc"
+          done <<< "$errs"
+          {
+            echo '### xcodebuild failed (exit '"$status"')'
+            echo '```'
+            echo "$errs"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
       - name: Pack Payload/ into an .ipa
