@@ -38,7 +38,16 @@ an empty list below means no build has been dropped in yet, not a broken button.
   </div>
 
   <div class="card">
-    <h2>iPhone &mdash; the route, step by step</h2>
+    <h2>iPhone &mdash; parked by you, on purpose</h2>
+    <p class="claim">On 2026-11-15 you asked why the app could not simply be downloaded from
+      AltStore, and the answer is that AltStore cannot install itself: something has to sign the
+      build with your Apple ID first, and that something runs on this PC and needs Apple&rsquo;s
+      device stack under it. Counted as steps, the route costs about a dozen of them plus three
+      installers, which you said was too much for what the <a href="/phone">Phone page</a> already
+      does in fifteen seconds. So this route is <strong>parked</strong>, not failed &mdash; the
+      build is compiled, the file is here, the listing is live, and everything that is left is
+      yours to do in one sitting whenever you want an app icon that came from a store page instead
+      of the share sheet. Nothing below is a task you have agreed to.</p>
     <p class="k">Two separate jobs, and only one of them needs Apple&rsquo;s tools. Compiling the
       wrapper is the job a Mac owns; <em>signing</em> it is not. AltStore&rsquo;s own Windows
       instructions say AltServer runs on this PC and signs with your Apple ID, so the iPhone half is:
@@ -56,13 +65,16 @@ an empty list below means no build has been dropped in yet, not a broken button.
         pretend a blown-up copy is high resolution. iPhone icons install and display fine without
         them; only an App Store submission would refuse.</li>
       <li><strong>Put the file where this page can see it.</strong> Unzip the artifact into
-        <code>data\packages</code>. This page picks it up on the next reload and the listing file
-        below stops being empty &mdash; it is generated from that file&rsquo;s bytes, so the size and
-        the date in it are measured, never typed.</li>
-      <li><strong>Install AltServer on this PC.</strong> AltStore&rsquo;s Windows page requires iTunes
-        and iCloud installed directly from Apple (not the Microsoft Store builds), with wifi sync
-        enabled. Then <em>you</em> type your Apple ID and password into AltServer &mdash; that is
-        your credential and this app never touches it.</li>
+        <code>data\packages</code>. <strong>Done:</strong> <code>FameStrategist.ipa</code> is in that
+        folder, and this page and <a href="/store/apps.json">the listing</a> both read it from its
+        bytes &mdash; the size and the date are measured, never typed.</li>
+      <li><strong>Install AltServer on this PC.</strong> <em>Not done, and this is where the route
+        waits for you.</em> AltStore&rsquo;s Windows page requires iTunes and iCloud installed
+        directly from Apple (not the Microsoft Store builds), with wifi sync enabled. The three files
+        it needs are already downloaded to <code>data\altstore-setup</code> (iTunes 202 MB, iCloud
+        161 MB, <code>altinstaller.zip</code>), so no fetching is left. Then <em>you</em> type your
+        Apple ID and password into AltServer &mdash; that is your credential and this app never
+        touches it.</li>
       <li><strong>Add the source on the phone.</strong> Paste the listing URL below into
         AltStore&rsquo;s source field, on a phone joined to the same wifi with this laptop awake.</li>
       <li><strong>Let it keep itself installed.</strong> A personal signature is short-lived, so
@@ -87,19 +99,20 @@ an empty list below means no build has been dropped in yet, not a broken button.
       a marketplace. AltStore Classic&rsquo;s path is your own Apple ID signing your own build;
       the pages read here state no region limit for it.</p>
     <h3>What has not happened yet</h3>
-    <p class="claim">The <code>.ipa</code> is on GitHub, not on this machine. Run
-      <strong>#6</strong> of the <code>ipa</code> action compiled <code>ios\</code> for the first
-      time, on Xcode 26.6, and uploaded the result as the artifact
-      <code>fame-strategist-ipa</code>. The three runs before it were red, and each one named a
-      defect that only a compiler could name: an error constant Apple&#39;s enum does not contain, a
-      delegate method labelled <code>with:</code> instead of WebKit&#39;s
+    <p class="claim">Nothing is installed on a phone, and nothing Apple is installed on this
+      machine &mdash; no iTunes, no iCloud, no Bonjour, no Apple Mobile Device Service, no AltServer
+      (checked the same day). The <code>.ipa</code> itself is real and is here: run <strong>#6</strong>
+      of the <code>ipa</code> action compiled <code>ios\</code> for the first time on Xcode 26.6, run
+      <strong>#7</strong> is the artifact you downloaded, and the file now sits in
+      <code>data\packages</code> where the table above can see it. The three runs before the green one
+      were red, and each named a defect only a compiler could name: an error constant Apple&#39;s enum
+      does not contain, a delegate method labelled <code>with:</code> instead of WebKit&#39;s
       <code>withError:</code> &mdash; which compiled and simply never became the delegate, so the
       &ldquo;the laptop did not answer&rdquo; screen would not have appeared &mdash; and an
       <code>Info.plist</code> with no <code>CFBundleExecutable</code>, meaning an app that installs
-      and does not know which file to run. A GitHub artifact can only be downloaded by a signed-in
-      browser, so that download is yours: the file has to land in <code>data\packages</code> before
-      this page can offer it. Nothing has been installed on a phone, and the plain
-      <code>http</code> question above is still open.</p>
+      and does not know which file to run. All three are fixed in the source. What is left is not code.</p>
+    <p class="claim">Also still untested, and only testable on the phone: whether AltStore will read
+      a source over plain <code>http</code> at all. That question is parked with the route.</p>
   </div>
 
   <div class="card">
