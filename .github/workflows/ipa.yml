@@ -45,19 +45,48 @@ jobs:
 
       - name: Turn project.yml into a project
         working-directory: ios
-        run: xcodegen generate
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          # A scheme xcodebuild cannot see is one of the ways this job dies with exit 65 and no clue,
+          # so name the schemes out loud. The job summary below is the reason: unlike the raw log, the
+          # summary is readable on a public repository without being signed in to GitHub.
+          xcodebuild -list -project FameStrategist.xcodeproj | tee schemes.txt \
+            >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Compile for the device, sign nothing
         working-directory: ios
         run: |
-          set -euo pipefail
+          set -uo pipefail
           xcodebuild -project FameStrategist.xcodeproj \
             -scheme FameStrategist \
             -sdk iphoneos -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build
+            build > xcodebuild.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            # The compiler's own words are the only output worth having, and last time this went red
+            # nobody outside a logged-in GitHub session could read them: the inline log and the log
+            # download are both behind sign-in, while annotations and $GITHUB_STEP_SUMMARY are public.
+            # So the failures get republished through both, and the next red run is debuggable from
+            # the summary page alone.
+            {
+              echo '### xcodebuild failed (exit '"$status"'). First lines it objected to:'
+              echo '```'
+              grep -E "error:|fatal|not currently configured|No such file|The following build commands failed|missing|unavailable" xcodebuild.log | head -30
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -E "error:|fatal|not currently configured|The following build commands failed" xcodebuild.log \
+              | head -12 \
+              | while IFS= read -r line; do
+                  esc=$(printf '%s' "${line:0:200}" | sed -e 's/%/%25/g' -e 's/"/%22/g' | tr -d '\r\n')
+                  echo "::error::$esc"
+                done
+            echo "xcodebuild exited $status - see the run summary for the error lines" >&2
+          fi
+          exit "$status"
 
       - name: Pack Payload/ into an .ipa
         working-directory: ios
